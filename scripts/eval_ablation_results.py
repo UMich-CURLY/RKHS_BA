@@ -47,6 +47,8 @@ def box_plot(ratio_list, x):
 
 def eval_seq_mean_err(prefix, difficulty, seqs, ratio_list, date):
     errs = []
+
+def eval_seq_mean_err(prefix, difficulty, seqs, ratio_list, date):
     for ratio in ratio_list:
         print("{} noise sigma: {}".format(prefix, ratio))
         log_err_all = []
@@ -64,9 +66,11 @@ def eval_seq_mean_err(prefix, difficulty, seqs, ratio_list, date):
         print("fro_err_all shape is {}, mean is {}, std is {}".format( fro_err_all.shape, np.mean(fro_err_all), np.std(fro_err_all)))
         errs.append(fro_err_all)
     box_plot(ratio_list, errs)
+    
             
 
 
 if __name__ == "__main__":
     #   (eval_seq_mean_err('semantic', 'Easy', ['abandonedfactory', 'gascola','seasonsforest', 'seasonsforest_winter', 'soulcity' ], ['0.0',  '0.1',   '0.25', '0.5',  '1',  '2',  '4' , '8'], 'dec15'))
     (eval_seq_mean_err('semantic_ablation/semantic', 'Easy', ['abandonedfactory', 'gascola','seasonsforest', 'seasonsforest_winter', 'soulcity' ], ['0.0',   '0.25', '0.5',  '1',  '2'], 'dec15'))
+    ##eval_seq_mean_err('semantic', 'Easy', ['abandonedfactory', 'gascola','seasonsforest', 'seasonsforest_winter', 'soulcity' ], ['0.0',   '0.25', '0.5',  '1',  '2'], 'dec15'))
