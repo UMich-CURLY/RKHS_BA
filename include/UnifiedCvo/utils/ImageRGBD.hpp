@@ -12,23 +12,17 @@ namespace cvo {
   class ImageRGBD : public RawImage {
   public:
     ImageRGBD(const cv::Mat & image,
-              const std::vector<DepthType> & depth_image) : depth_image_(depth_image),
-                                                            RawImage(image) {}
-
-    ImageRGBD(const cv::Mat & image,
               const std::vector<DepthType> & depth_image,
-              int num_classes,
-              const std::vector<float> & semantics) : depth_image_(depth_image),
-                                                      RawImage(image, num_classes, semantics) {}
+              bool is_denoise=true) : depth_image_(depth_image),
+                                      RawImage(image, is_denoise) {}
 
     ImageRGBD(const cv::Mat & image,
               const std::vector<DepthType> & depth_image,
               int num_classes,
               const std::vector<float> & semantics,
-              bool is_adding_semantic_noise) : depth_image_(depth_image),
-                                                      RawImage(image, num_classes, semantics) {}
-    
-    
+              bool is_denoise=true) : depth_image_(depth_image),
+                                      RawImage(image, num_classes, semantics, is_denoise) {}
+
     const std::vector<DepthType> & depth_image() const  { return depth_image_; }
     
   private:

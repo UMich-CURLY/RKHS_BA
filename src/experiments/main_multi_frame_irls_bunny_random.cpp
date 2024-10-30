@@ -6,7 +6,7 @@
 #include <fstream>
 //#include <experimental/filesystem>
 #include "utils/def_assert.hpp"
-#include "utils/GassianMixture.hpp"
+#include "utils/GaussianMixture.hpp"
 #include "utils/eigen_utils.hpp"
 #include <pcl/common/io.h>
 #include <pcl/filters/voxel_grid.h>

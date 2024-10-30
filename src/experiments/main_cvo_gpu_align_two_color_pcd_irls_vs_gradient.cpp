@@ -34,7 +34,7 @@
 #include <fstream>
 //#include <experimental/filesystem>
 #include "utils/def_assert.hpp"
-#include "utils/GassianMixture.hpp"
+#include "utils/GaussianMixture.hpp"
 #include "utils/eigen_utils.hpp"
 //#include "utils/Augmentation.hpp"
 //#include "utils/pcl_utils.hpp"

@@ -28,9 +28,7 @@ namespace cvo{
                                    int num_semantic_class,
                                    std::vector<float> & semantics,
                                    int sky_label,
-                                   float rand_semantic_noise_ratio=0.0,
-                                   float max_depth=std::numeric_limits<float>::max(),
-                                   float depth_misalignment_sigma=0.0);
+                                   float max_depth=std::numeric_limits<float>::max());
 
     int read_next_rgbd_with_flow(cv::Mat & rgb_img,
                                  std::vector<float> & depth,

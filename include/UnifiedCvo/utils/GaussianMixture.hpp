@@ -15,9 +15,10 @@ namespace cvo {
 
     ~GaussianMixtureDepthGenerator() {}
 
-    Eigen::Vector3f sample(const Eigen::Vector3f & center,
-                           const Eigen::Vector3f & dir,
-                           bool * is_inlier = nullptr) {
+    template<typename T>
+    T sample(const T & center,
+             const T & dir,
+             bool * is_inlier = nullptr) {
       float g = 0;
       if (bernoulli_dist_(gen_)) {
         /// gaussian
@@ -27,7 +28,7 @@ namespace cvo {
         g = uniform_(gen_);
         if (is_inlier) *is_inlier = false;
       }
-      Eigen::Vector3f sampled = center + dir * g;
+      T sampled = center + dir * g;
       return sampled;
     }
 

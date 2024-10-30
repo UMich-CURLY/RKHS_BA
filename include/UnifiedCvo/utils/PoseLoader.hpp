@@ -282,6 +282,26 @@ namespace cvo {
   }
   
 
+  template <typename T, unsigned int ROWS, unsigned int major>
+  void write_traj_file(const std::string & fname,
+                       std::map<int, Eigen::Matrix<T, ROWS, 4, major>> &  poses) {
+
+    std::ofstream outfile(fname);
+    for (auto && [i, pose_i] : poses) {
+    //for (int i = 0; i< poses.size(); i++) {
+      Eigen::Matrix<T, 4, 4, major> pose = Eigen::Matrix<T, 4, 4, major>::Identity();
+      pose.block(0,0, ROWS, 4) = pose_i;
+      Sophus::SO3<T> q(pose.block(0,0,3,3));
+      auto q_eigen = q.unit_quaternion().coeffs();
+      Eigen::Matrix<T, 3, 1> t = pose.block(0,3,3,1);
+      outfile << t(0) <<" "<< t(1)<<" "<<t(2)<<" "
+              <<q_eigen[0]<<" "<<q_eigen[1]<<" "<<q_eigen[2]<<" "<<q_eigen[3]<<std::endl;
+    
+    }
+    outfile.close();
+  }
+
+
 
   template <typename T, unsigned int ROWS, unsigned int major>
   void write_traj_file(const std::string & fname,

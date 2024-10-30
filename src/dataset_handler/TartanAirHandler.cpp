@@ -12,6 +12,7 @@
 #include <boost/filesystem.hpp>
 #include "dataset_handler/TartanAirHandler.hpp"
 #include "cnpy.h"
+
 using namespace std;
 using namespace boost::filesystem;
 
@@ -245,13 +246,10 @@ namespace cvo {
                                                    int num_semantic_class,
                                                    std::vector<float> & semantics,
                                                    int sky_label,
-                                                   float rand_semantic_noise_sigma,
-                                                   float max_depth,
-                                                   float depth_misalignment_sigma){
+                                                   float max_depth) {
     
     if (read_next_rgbd(rgb_img, dep_vec))
       return -1;
-
     
     if (semantic_class.empty()) {
       cout << "No useable semantic class mapping\n";
@@ -286,9 +284,9 @@ namespace cvo {
     semantics.resize(num_pixels * num_semantic_class);
     fill(semantics.begin(), semantics.end(), 0);
 
-    std::mt19937 generator;
-    std::normal_distribution<float> dist_semantic(0.0, rand_semantic_noise_sigma);
-    std::normal_distribution<float> dist_misalign(0.0, depth_misalignment_sigma);
+    //std::mt19937 generator;
+    //std::normal_distribution<float> dist_semantic(0.0, rand_semantic_noise_sigma);
+    //std::normal_distribution<float> dist_misalign(0.0, depth_misalignment_sigma);
     
     // Add Gaussian noise
     
@@ -301,29 +299,8 @@ namespace cvo {
       if (label == sky_label || dep_vec[i] > max_depth)
         dep_vec[i] = std::nanf("1");
 
-      
-
       uint8_t remapped_label = semantic_class[label];
       semantics[begin_idx + remapped_label] = 1.0; // mark groundtruth with prob 1.p0
-      if (rand_semantic_noise_sigma > 1e-4) {
-	Eigen::Map<Eigen::Matrix<float, 1, Eigen::Dynamic>> semantic_dist (&semantics[begin_idx], num_semantic_class); 
-
-        for (int j = 0; j < num_semantic_class; j++)  {
-          semantic_dist[j] = (semantic_dist[j] + dist_semantic(generator));
-          if (semantic_dist[j] < 0)
-            semantic_dist[j] = 0;
-        }
-        semantic_dist.normalize();
-        //std::cout<<"After perturbation, semantic_dist is "<<semantic_dist.transpose()<<"\n";
-	if (i == 1) {
-	  std::cout<<"normalized semantic dist with noise is: ";
-	  for (int j = 0; j < num_semantic_class; j++) {
-            std::cout<<semantics[begin_idx+j]<<" ";
-	  }
-	  std::cout<<"\n";
-        }
-
-      }   
     }
     
     return 0;
