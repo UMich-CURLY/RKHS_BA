@@ -195,7 +195,17 @@ namespace cvo {
     for (int c = 0; c < cols_; c++) {
       for (int r = 0; r < rows_; r++) {
         Eigen::Map<const Eigen::VectorXf> dist(&(this->semantic_image_[(r*cols_+c)*num_class_]), num_class_);
-        int label = dist.maxCoeff();
+
+        int label = -1;
+        float max_dist = 0;
+        for (int j = 0; j < num_class_; j++) {
+          if (dist(j) > max_dist) {
+            max_dist = dist(j);
+            label = j;
+          }
+        }
+        //int label = dist.maxCoeff();
+
         auto color = label2color[label];
         cv::Vec3b pix;
         pix[0] = std::get<0>(color);
