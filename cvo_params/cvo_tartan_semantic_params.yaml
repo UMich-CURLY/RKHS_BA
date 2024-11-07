@@ -34,17 +34,17 @@ is_using_semantics: 1
 is_using_range_ell: 0
 is_using_kdtree: 0 #1
 nearest_neighbors_max: 256 #20
-is_using_geometric_type: 0 #1
+is_using_geometric_type: 1
 # for irls solver
 multiframe_using_cpu: 0
 multiframe_num_neighbors: 256 #256
-multiframe_max_iters: 100 #20 
-multiframe_ell_init: 0.05 #0.05
+multiframe_max_iters: 1 #1000 #20 
+multiframe_ell_init: 3.0 #0.05
 multiframe_ell_min: 0.025 #0.025 #1.0
 multiframe_ell_decay_rate:  0.95
-multiframe_iterations_per_ell: 20
-multiframe_downsample_voxel_size: 0.2 #0.05 #3.0 #5 #3
+multiframe_iterations_per_ell: 10
+multiframe_downsample_voxel_size: 1.0 #0.05 #3.0 #5 #3
 multiframe_iterations_per_solve: 10 #10
 multiframe_is_optimizing_ell: 0
-multiframe_is_sorting_inner_product: 0 #2 #256
+multiframe_is_sorting_inner_product: 8 #2 #256
 multiframe_is_free_memory_each_iter: 0 #1
