@@ -1,6 +1,6 @@
-# Unified CVO (Continuous Visual Odometry)
+# RKHS-bA
 
-This repository is an implementation for CVO (Continuous Visual Odometry).  It can perform pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in KITTI stereo and Tum RGB-D dataset. Details are in the [A New Framework for Registration of Semantic Point Clouds from Stereo and RGB-D Cameras](https://arxiv.org/abs/2012.03683) and [Nonparametric Continuous Sensor Registration](https://arxiv.org/abs/2001.04286). 
+This repository is an implementation for RKHS-BA.  It can perform global two-view and multi-view pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in TartanAir and Kitti dataset. Details are in the [RKHS-BA: A Robust Correspondence-Free Multi-View Registration Framework with Semantic Point Clouds](https://arxiv.org/abs/2403.01254). It is built on the code of [CVO](https://github.com/UMich-CURLY/unified_cvo) which performs two-view registration.
 
 Specifically, this repository provides:
 * GPU implentation of goemetric, color, and semantic based registration
@@ -19,7 +19,7 @@ Stacked point clouds based on the resulting frame-to-frame trajectory:
 ---
 
 ### Dependencies
-We recommend using this [Dockerfile](https://github.com/UMich-CURLY/docker_images/tree/master/cvo_gpu) to get a prebuilt environment with all the following dependencies. 
+We recommend using this [Dockerfile](https://github.com/UMich-CURLY/docker_images/tree/cvo_dev/cvo_gpu) to get a prebuilt environment with all the following dependencies. 
 
 *  `cuda 10 or 11`  (already in docker)
 *  `gcc9` (already in docker)
