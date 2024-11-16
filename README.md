@@ -315,27 +315,11 @@ Point Selector and Cvo PointCloud constructor: `include/unified_cvo/utils/CvoPoi
  
  ### Citations
  If you find this repository useful, please cite 
- ```
- @inproceedings{zhang2021new,
-  title={A New Framework for Registration of Semantic Point Clouds from Stereo and {RGB-D} Cameras},
-  author={Zhang, Ray and Lin, Tzu-Yuan and Lin, Chien Erh and Parkison, Steven A and Clark, William and Grizzle, Jessy W and Eustice, Ryan M and Ghaffari, Maani},
-  booktitle={Proceedings of the IEEE International Conference on Robotics and Automation},
-  year={2021},
-  pages={12214-12221},
-  organization={IEEE},
-  doi={10.1109/ICRA48506.2021.9561929}
-  }
- ```
- and 
- 
 ```
-@article{clark2021nonparametric,
-  title={Nonparametric Continuous Sensor Registration},
-  author={Clark, William and Ghaffari, Maani and Bloch, Anthony},
-  journal={Journal of Machine Learning Research},
-  volume={22},
-  number={271},
-  pages={1--50},
-  year={2021}
+@article{zhang2024rkhs,
+  title={RKHS-BA: A Semantic Correspondence-Free Multi-View Registration Framework with Global Tracking},
+  author={Zhang, Ray and Song, Jingwei and Gao, Xiang and Wu, Junzhe and Liu, Tianyi and Zhang, Jinyuan and Eustice, Ryan and Ghaffari, Maani},
+  journal={arXiv preprint arXiv:2403.01254},
+  year={2024}
 }
 ```
