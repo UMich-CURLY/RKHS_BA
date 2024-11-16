@@ -1,4 +1,4 @@
-# RKHS-bA
+# RKHS-BA
 
 This repository is an implementation for RKHS-BA.  It can perform global two-view and multi-view pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in TartanAir and Kitti dataset. Details are in the [RKHS-BA: A Robust Correspondence-Free Multi-View Registration Framework with Semantic Point Clouds](https://arxiv.org/abs/2403.01254). It is built on the code of [CVO](https://github.com/UMich-CURLY/unified_cvo) which performs two-view registration.
 
