@@ -35,7 +35,7 @@ is_using_range_ell: 0
 is_using_kdtree: 0
 nearest_neighbors_max: 512
 is_using_geometric_type: 0
-is_global_angle_registration: 0 #4
+is_global_angle_registration: 1 #4
 # for irls solver
 multiframe_using_cpu: 0
 multiframe_num_neighbors: 256
