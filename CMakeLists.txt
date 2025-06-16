@@ -767,12 +767,12 @@ target_include_directories(cvo_irls_finnforest PUBLIC
       target_link_libraries(cvo_irls_finnforest cvo_gpu_img cvo_utils finnforest boost_filesystem boost_system pcl_filters)
       
 
-#add_executable(cvo_irls_tartan_odom ${PROJECT_SOURCE_DIR}/src/experiments/main_irls_tartan_rgbd_odom.cpp)
-#target_include_directories(cvo_irls_tartan_odom PUBLIC
-#        "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"
-#        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
-#target_link_libraries(cvo_irls_tartan_odom cvo_gpu_img cvo_utils tartan boost_filesystem boost_system)
-#target_compile_definitions(cvo_irls_tartan PUBLIC -DNUM_CLASSES=20 -DFEATURE_DIMENSIONS=5 -DCUDA_BLOCK_SIZE=512 -DCVO_POINT_NEIGHBORS=256)
+add_executable(cvo_irls_tartan_ba_loop ${PROJECT_SOURCE_DIR}/src/experiments/main_irls_tartan_ba_loop.cpp)
+target_include_directories(cvo_irls_tartan_ba_loop PUBLIC
+        "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"                
+        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )  
+target_link_libraries(cvo_irls_tartan_ba_loop cvo_gpu_img cvo_utils tartan boost_filesystem boost_system glog Ceres::ceres)
+target_compile_definitions(cvo_irls_tartan_ba_loop PUBLIC -DNUM_CLASSES=20 -DFEATURE_DIMENSIONS=5 -DCUDA_BLOCK_SIZE=256 -DCVO_POINT_NEIGHBORS=256)
 
 add_executable(cvo_irls_tartan_ablation ${PROJECT_SOURCE_DIR}/src/experiments/main_irls_tartan_rgbd_ablation_reg.cpp)
 target_include_directories(cvo_irls_tartan_ablation PUBLIC

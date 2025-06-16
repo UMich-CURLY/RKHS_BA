@@ -22,8 +22,8 @@ using namespace boost::filesystem;
 int main(int argc, char *argv[]) {
   // list all files in current directory.
   //You could put any file path in here, e.g. "/home/me/mwah" to list that directory
-  cvo::TartanAirHandler tartan(argv[1]);
-  tartan.set_depth_folder_name("deep_depth");
+  cvo::TartanAirHandler tartan(argv[1], "deep_depth");
+  //tartan.set_depth_folder_name("deep_depth");
   int total_iters = tartan.get_total_number();
   std::cout<<"total num : "<<total_iters<<"\n";
   //vector<string> vstrRGBName = tum.get_rgb_name_list();
@@ -73,11 +73,13 @@ int main(int argc, char *argv[]) {
   std::cout<<"read source_raw\n";
   std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_raw,
                                                                     calib
-                                                                    , cvo::CvoPointCloud::CV_FAST
-								    ));
-								    //,cvo::CvoPointCloud::DSO_EDGES
- //                                                                   ));
-  //19, semantics_source, 
+                                                                    //, cvo::CvoPointCloud::CV_FAST
+                                                                    //								    ));
+								    ,cvo::CvoPointCloud::DSO_EDGES
+                                                                    ));
+  //19, semantics_source,
+
+  source->write_to_color_pcd(std::to_string(0)+".pcd");  
   std::cout<<"read source cvo point cloud\n";  
   std::cout<<"First point is "<<source->at(0).transpose()<<std::endl;
   
@@ -100,19 +102,19 @@ int main(int argc, char *argv[]) {
     //std::shared_ptr<cvo::Frame> target(new cvo::Frame(i+1, rgb, dep, calib,1));
     std::shared_ptr<cvo::ImageRGBD<float>> target_raw(new cvo::ImageRGBD(rgb, dep, NUM_CLASSES, target_semantics));
     std::shared_ptr<cvo::CvoPointCloud> target(new cvo::CvoPointCloud(*target_raw, calib,
-                                                                    cvo::CvoPointCloud::CV_FAST));
-                                                                      //,cvo::CvoPointCloud::DSO_EDGES
-    if (i == 0){
-        std::cout<<"Write first pcd\n";
-        target->write_to_color_pcd(std::to_string(i+1)+".pcd");
-    }
+                                                                      //cvo::CvoPointCloud::CV_FAST));
+                                                                      cvo::CvoPointCloud::DSO_EDGES));
+    //if (i == 0){
+    //std::cout<<"Write first pcd\n";
+    //target->write_to_color_pcd(std::to_string(i+1)+".pcd");
+        // }
     std::cout<<"First point is "<<target->at(0).transpose()<<std::endl;
 
     // std::cout<<"reading "<<files[cur_kf]<<std::endl;
 
     Eigen::Matrix4f result, init_guess_inv;
-    init_guess_inv = init_guess.inverse();
-    printf("Start align... num_fixed is %d, num_moving is %d\n", source->num_points(), target->num_points());
+    init_guess_inv = Eigen::Matrix4f::Identity(); //init_guess.inverse();
+    printf("Start align... num_fixed is %d, num_moving is %d, init_ell is %f\n", source->num_points(), target->num_points(), init_param.ell_init);
     std::cout<<std::flush;
     cvo_align.align(*source, *target, init_guess_inv, result);
     

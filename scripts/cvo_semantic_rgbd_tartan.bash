@@ -19,7 +19,7 @@ do
         i=${seqs[ind]}
         sky=${skylabel[ind]}
         pind=${index[ind]}
-	folder=tartan_rgbd_${difficulty}_${pind}_${i}_${date}
+	folder=tartan_semantic_${difficulty}_${pind}_${i}_${date}
         dataset_folder=${disk}/tartanair/$i/${difficulty}/${pind}/
         echo " Current Seq: ${i} ${difficulty} with sky label ${sky} ${pind}"        
 	rm -rf $folder
@@ -27,12 +27,15 @@ do
 	rm *.pcd
     
     
-      ./build/bin/cvo_align_gpu_rgbd_tartan $dataset_folder cvo_params/cvo_outdoor_params.yaml \
-                                            tartan_rgbd_${i}_${pind}_${date}.txt 0 30000  $sky
+      ./build/bin/cvo_align_gpu_rgbd_tartan $dataset_folder cvo_params/cvo_semantic_outdoor_params.yaml \
+                                            tartan_semantic_${i}_${pind}_${date}.txt 0 30000  $sky
 
       
-      mv tartan_rgbd_${i}_${pind}_${date}.txt  $folder/${seq}.txt
+      mv tartan_semantic_${i}_${pind}_${date}.txt  $folder/${seq}.txt
       cp $dataset_folder/poses.txt $folder/gt.txt
+     
+      python3 scripts/xyzq2kitti.py $dataset_folder/pose_left.txt $folder/gt_kitti.txt
+      python3 scripts/xyzq2kitti.py $folder/${seq}.txt $folder/tracking_kitti.txt
 
       done
 done

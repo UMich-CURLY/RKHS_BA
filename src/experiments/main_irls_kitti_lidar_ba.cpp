@@ -347,6 +347,7 @@ void write_traj_file(std::string & fname,
 }
 
 
+
 void write_traj_file(std::string & fname,
                      std::vector<std::string> & timestamps,
                      std::vector<cvo::CvoFrame::Ptr> & frames ) {

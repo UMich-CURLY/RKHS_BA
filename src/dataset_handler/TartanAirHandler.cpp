@@ -17,11 +17,16 @@ using namespace std;
 using namespace boost::filesystem;
 
 namespace cvo {
-  TartanAirHandler::TartanAirHandler(std::string tartan_traj_folder){
+  TartanAirHandler::TartanAirHandler(std::string tartan_traj_folder,
+                                     std::string depth_folder_dir){
     this->folder_name = tartan_traj_folder;
-    this->depth_folder_name =   "depth_left";
+
+    if (depth_folder_dir.size() == 0)
+      depth_folder_dir = "depth_left";
+      
+    this->depth_folder_name = depth_folder_dir;
     // use left camera only, rgbd
-    const string depth_pth = tartan_traj_folder + "/" + depth_folder_name;
+    const string depth_pth = tartan_traj_folder + "/" + this->depth_folder_name;
     const string image_pth = tartan_traj_folder + "/image_left";
     // count number of files in both dirs
     int depth_count = 0;
@@ -99,7 +104,9 @@ namespace cvo {
     return 0;
   }
 
-  int TartanAirHandler::read_next_rgbd(cv::Mat & rgb_img, std::vector<float> & dep_vec) {
+  int TartanAirHandler::read_next_rgbd(cv::Mat & rgb_img, std::vector<float> & dep_vec,
+                                       float max_depth,
+                                       bool is_disparity) {
     if (curr_index >= total_size) {
       std::cout<<"Error: index is larger than maximum";
       return -1;
@@ -125,7 +132,11 @@ namespace cvo {
     for (int r = 0; r < raw_dep.rows; r++) {
       for (int c = 0; c < raw_dep.cols; c++) {
         float pix = raw_dep.at<float>(r, c);
-        if (pix > 60000)
+        if (pix > 60000 )
+          pix = std::nanf("1");
+        if (is_disparity)
+          pix = 80 / pix;
+        if (pix > max_depth)
           pix = std::nanf("1");
           //  raw_dep.at<float>(r, c) = std::nanf("1");
         dep_vec[ r * raw_dep.cols + c] =  pix;
@@ -139,12 +150,28 @@ namespace cvo {
   }
 
   int TartanAirHandler::read_next_rgbd(cv::Mat & rgb_img, std::vector<float> & dep_vec,
-                     int num_semantic_class, std::vector<float> & semantics) {
-      if (read_next_rgbd(rgb_img, dep_vec))
+                                       int num_semantic_class, std::vector<float> & semantics,
+                                       float max_depth,
+                                       bool is_disparity) {
+    if (this->sky_label_!=-1) {
+      if (-1 == read_next_rgbd_without_sky(rgb_img,
+                                           dep_vec,
+                                           num_semantic_class,
+                                           semantics,
+                                           this->sky_label_,
+                                           max_depth,
+                                           is_disparity))
+
         return -1;
+    } else {
+      if (read_next_rgbd(rgb_img, dep_vec, max_depth, is_disparity))
+        return -1;
+
       if (read_next_semantics(rgb_img.total(), num_semantic_class, semantics))
         return -1;
-      return 0;
+
+    }
+    return 0;    
   }
 
   int TartanAirHandler::read_next_stereo(cv::Mat & left, cv::Mat & right) {
@@ -246,9 +273,10 @@ namespace cvo {
                                                    int num_semantic_class,
                                                    std::vector<float> & semantics,
                                                    int sky_label,
-                                                   float max_depth) {
+                                                   float max_depth,
+                                                   bool is_disparity) {
     
-    if (read_next_rgbd(rgb_img, dep_vec))
+    if (read_next_rgbd(rgb_img, dep_vec, max_depth, is_disparity))
       return -1;
     
     if (semantic_class.empty()) {
