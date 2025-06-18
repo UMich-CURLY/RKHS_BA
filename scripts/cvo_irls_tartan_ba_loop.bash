@@ -15,17 +15,17 @@ disk="/home/rayzhang/media/"
 for difficulty in Easy #Hard
 do
     echo "new seq $i"
-    skylabel=(196 196 130)
+    skylabel=(130 196 196 )
     
-    seqs=(abandonedfactory seasonsforest soulcity)
-    index=(P005 P002 P001)
+    seqs=(soulcity abandonedfactory seasonsforest)
+    index=(P001 P005 P002)
 
     for ind in ${!seqs[@]}
     do
         i=${seqs[ind]}
         sky=${skylabel[ind]}
         pind=${index[ind]} 
-	folder=tartan_rgbd_${difficulty}_${pind}_${i}_${date}
+	folder=tartan_semantic_${difficulty}_${pind}_${i}_${date}
         dataset_folder=${disk}/tartanair/$i/${difficulty}/${pind}/
        
 	#folder=tartan_rgbd_${difficulty}_${i}_${}_${date}
@@ -35,7 +35,7 @@ do
 	mkdir -p $folder
 	rm *.pcd
         
-	gdb -ex run --args \
+	#gdb -ex run --args \
         ./$build_dir/bin/cvo_irls_tartan_ba_loop \
             --data_type tartan_rgbd \
             --data_path $dataset_folder \
@@ -55,7 +55,7 @@ do
             --is_read_loop_closure_poses_from_file 0 \
             --is_store_pcd_each_frame 0 \
             --is_global_registration 1 \
-            --is_doing_ba 0
+            --is_doing_ba 1
         
         #gdb -ex run --args \
         #./build/bin/cvo_irls_tartan_odom $dataset_folder cvo_params/cvo_outdoor_params.yaml cvo_calib_deep_depth.txt 4 tracking.txt ba.txt 0 0 100000 $sky # > log_tartan_rgbd_${difficulty}_${i}.txt

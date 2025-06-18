@@ -169,8 +169,8 @@ done
 
 
 
-start_ind=150
-end_ind=250
+start_ind=0
+end_ind=100000
 for i in seasidetown
 do
 	echo "new seq $i"
@@ -182,8 +182,8 @@ do
 done
 
 
-start_ind=40
-end_ind=130
+start_ind=0
+end_ind=1000000
 for i in ocean
 do
 	echo "new seq $i"

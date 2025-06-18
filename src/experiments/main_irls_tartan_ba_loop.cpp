@@ -96,7 +96,7 @@ void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_sel
       std::shared_ptr<cvo::CvoPointCloud> pc_full_raw;
       if (!is_edge_only)
         pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL));
-      std::shared_ptr<cvo::CvoPointCloud> pc_edge_raw(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::DSO_EDGES));
+      std::shared_ptr<cvo::CvoPointCloud> pc_edge_raw(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::CV_FAST));
 
         
       if (j > 0) {
@@ -838,8 +838,19 @@ int main(int argc, char** argv) {
   std::string lc_prefix(("loop_closure_"));
   if (pcs.size())
     log_lc_pc_pairs(BA_poses, loop_closures, pcs, lc_prefix);
+
+  std::cout << "Start construct BA CvoFrame\n";
+  std::vector<std::pair<int, int>> loop_closures_ba;  
+  for (int i = 0; i < pgo_poses.size(); i++) {
+    for (int j = i+50; j < pgo_poses.size(); j++) {
+      double dist = (pgo_poses[i].block<3,1>(0,3) - pgo_poses[j].block<3,1>(0,3)).norm();
+      if (dist < 1 ){
+        std::cout<<"loop: dist betwee "<<i<<" and "<<j<<" is "<<dist<<"\n";
+        loop_closures_ba.push_back(std::make_pair(i,j));
+      }
+    }
+  }
   
-  std::cout<<"Start construct BA CvoFrame\n";
   /// construct BA CvoFrame struct
   for (auto i : result_selected_frames) {
     std::cout<<"Copy "<<i<<"th point cloud to gpu \n";
@@ -855,12 +866,12 @@ int main(int argc, char** argv) {
   /// Multiframe alignment
   std::cout<<"Construct loop BA problem\n";
   ASSERT(frames.size() == gt_poses.size(), "frame size must be equal to gt_poses size");
-  write_loop_closure_pcds( frames, loop_closures, false, "before_ba_");
+  write_loop_closure_pcds( frames, loop_closures_ba, false, "before_ba_");
   construct_loop_BA_problem(cvo_align,
-                            loop_closures,
+                            loop_closures_ba,
                             frames, gt_pose_selected_vec, num_neighbors_per_node,
                             num_merging_sequential_frames);
-  write_loop_closure_pcds( frames, loop_closures, false, "after_ba_");
+  write_loop_closure_pcds( frames, loop_closures_ba, false, "after_ba_");
   std::cout<<"Write stacked point cloud\n";
   f_name = std::string("after_BA_loop.pcd") ;
   write_transformed_pc(frames, f_name,0, frames.size()-1);

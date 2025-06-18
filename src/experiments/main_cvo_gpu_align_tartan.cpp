@@ -66,11 +66,20 @@ int main(int argc, char *argv[]) {
 
   cv::Mat source_rgb;
   vector<float> source_depth, source_semantics;
-  tartan.read_next_rgbd_without_sky(source_rgb, source_depth,
-                                    NUM_CLASSES, source_semantics, sky_label);
-  std::shared_ptr<cvo::ImageRGBD<float>> source_raw(new cvo::ImageRGBD<float>(source_rgb, source_depth,
-			  NUM_CLASSES, source_semantics));
-  std::cout<<"read source_raw\n";
+  std::shared_ptr<cvo::ImageRGBD<float>> source_raw;  
+  if (sky_label > -1) {
+    tartan.read_next_rgbd_without_sky(source_rgb, source_depth,
+                                      NUM_CLASSES, source_semantics, sky_label);
+    source_raw.reset(new cvo::ImageRGBD<float>(source_rgb, source_depth,
+                                               NUM_CLASSES, source_semantics));
+    
+  } else {
+    tartan.read_next_rgbd(source_rgb, source_depth);
+    source_raw.reset(new cvo::ImageRGBD<float>(source_rgb, source_depth));
+
+
+  }
+    
   std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_raw,
                                                                     calib
                                                                     //, cvo::CvoPointCloud::CV_FAST
@@ -91,16 +100,27 @@ int main(int argc, char *argv[]) {
     std::cout<<"Aligning "<<i<<" and "<<i+1<<" with GPU "<<std::endl;
 
     tartan.next_frame_index();
-    cv::Mat rgb;
-    std::vector<float> dep, target_semantics;    
+    cv::Mat target_rgb;
+    std::vector<float> target_depth, target_semantics;
+    std::shared_ptr<cvo::ImageRGBD<float>> target_raw;
     //sdt::vector<float> semantics_target;
-    if (tartan.read_next_rgbd_without_sky(rgb, dep,NUM_CLASSES, target_semantics, sky_label) != 0) {
-      std::cout<<"finish all files\n";
-      break;
+    if (sky_label > -1) {
+      if (tartan.read_next_rgbd_without_sky(target_rgb, target_depth, NUM_CLASSES, target_semantics, sky_label) != 0) {
+        std::cout<<"finish all files\n";
+        break;
+      }
+
+      //std::shared_ptr<cvo::Frame> target(new cvo::Frame(i+1, rgb, dep, calib,1));
+      target_raw.reset(new cvo::ImageRGBD(target_rgb, target_depth, NUM_CLASSES, target_semantics));
+
+    } else {
+      if (0 != tartan.read_next_rgbd(target_rgb, target_depth)) break;
+      target_raw .reset(new cvo::ImageRGBD<float>(target_rgb, target_depth));
+    
     }
+    
 
     //std::shared_ptr<cvo::Frame> target(new cvo::Frame(i+1, rgb, dep, calib,1));
-    std::shared_ptr<cvo::ImageRGBD<float>> target_raw(new cvo::ImageRGBD(rgb, dep, NUM_CLASSES, target_semantics));
     std::shared_ptr<cvo::CvoPointCloud> target(new cvo::CvoPointCloud(*target_raw, calib,
                                                                       //cvo::CvoPointCloud::CV_FAST));
                                                                       cvo::CvoPointCloud::DSO_EDGES));

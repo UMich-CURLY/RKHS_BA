@@ -839,7 +839,16 @@ target_include_directories(cvo_align_gpu_rgbd_image_tartan_format PUBLIC
 	#$<BUILD_INTERFACE:${UnifiedCvo_BINARY_DIR}/include>
         "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"
         $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
-target_link_libraries(cvo_align_gpu_rgbd_image_tartan_format cvo_gpu_img cvo_cpu_lib tum cvo_utils boost_filesystem boost_system tartan)
+      target_link_libraries(cvo_align_gpu_rgbd_image_tartan_format cvo_gpu_img cvo_cpu_lib tum cvo_utils boost_filesystem boost_system tartan)
+
+add_executable(cvo_align_gpu_two_tartan ${PROJECT_SOURCE_DIR}/src/experiments/main_cvo_gpu_align_two_pc_dataset.cpp)
+target_include_directories(cvo_align_gpu_two_tartan PUBLIC
+	#$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}>
+	#$<BUILD_INTERFACE:${UnifiedCvo_BINARY_DIR}/include>
+        "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"
+        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
+target_link_libraries(cvo_align_gpu_two_tartan cvo_gpu_img cvo_cpu_lib tum cvo_utils boost_filesystem boost_system tartan)
+      
 
 
 if (${PROJECT_NAME}_ENABLE_QT_VIEWER)
