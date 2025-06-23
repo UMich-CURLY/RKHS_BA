@@ -60,6 +60,71 @@ extern template class cvo::VoxelMap<pcl::PointXYZI>;
 //   outfile.close();
 //}
 
+void tracking_inliers(
+                      std::map<int, std::shared_ptr<cvo::CvoPointCloud>> pcs,
+                      const cvo::aligned_vector<Eigen::Matrix4d> & tracking_poses,
+                      std::map<int, std::vector<bool>> & inliers,
+                      
+                      ) {
+
+  const cvo::CvoPointCloud & kf = *pcs[0];
+  Eigen::Matrix3f non_isotropic_kernel= Eigen::Matrix3f::Identity();
+  non_isotropic_kernel(0,0) = depth_normal_ell;
+  non_isotropic_kernel(1,1) = depth_normal_ell;
+  non_isotropic_kernel(2,2) = depth_dir_ell;    
+  std::cout<<"kernel is "<<non_isotropic_kernel<<std::endl;
+  depths.resize(kf.size());
+  weights.resize(kf.size());
+  for (int i = 1; i < total_inds; i ++) {
+
+    Eigen::Matrix4f T_s = poses[0];
+    Eigen::Matrix4f T_t = poses[i];
+    Eigen::Matrix4f T_t2s = T_t.inverse() * T_s;
+    Eigen::Matrix4f T_s2t = T_s.inverse() * T_t;
+    std::cout<<"\nT_s\n"<<T_s
+             <<"\nT_t\n"<<T_t
+             <<"\nT_t2s\n"<<T_t2s
+             <<"\nT_s2t\n"<<T_s2t<<std::endl;
+
+    cvo::Association association;
+    cvo_align.compute_association_gpu(kf,
+                                      *pcs[i],
+                                      T_t2s,
+                                      non_isotropic_kernel,
+                                      association
+                                      );
+    std::cout<<" non kf "<<i<<" has nonzeros "<<association.pairs.nonZeros()<<std::endl;
+
+    cvo::CvoPointCloud pc_t_in_s(pcs[0]->num_features(),
+                                 pcs[0]->num_classes()
+                                 );
+    cvo::CvoPointCloud::transform(T_s2t,
+                                  *pcs[i],
+                                  pc_t_in_s
+                                  );
+
+    for (int k=0; k<association.pairs.outerSize(); ++k)
+    {
+      for (Eigen::SparseMatrix<float, Eigen::RowMajor>::InnerIterator it(association.pairs,k); it; ++it) {
+
+        int idx1 = it.row();
+        int idx2 = it.col();
+        float val = it.value();
+        depths[idx1].push_back(pc_t_in_s.at(idx2)(2));
+        weights[idx1].push_back(val);
+        if (idx1 == 2349)
+          std::cout<<"j="<<idx2<<", weght is "<<weights[idx1][weights[idx1].size()-1]<<std::endl;
+      }
+    }
+  }
+
+
+  for (auto&& [ ind, pc ]: pcs) {
+
+    
+  }
+  
+}
 
 void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_selected_frames,
                                                 cvo::TartanAirHandler & dataset,
@@ -94,9 +159,18 @@ void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_sel
                                     false));
 
       std::shared_ptr<cvo::CvoPointCloud> pc_full_raw;
-      if (!is_edge_only)
-        pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL));
-      std::shared_ptr<cvo::CvoPointCloud> pc_edge_raw(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::CV_FAST));
+      if (!is_edge_only) {
+        pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL, 8.0f));
+        if (pc_full_raw->size() < 300) {
+          pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL, 30.0f));     
+        }
+
+        // filter_points(pc_full_raw);
+      }
+      std::shared_ptr<cvo::CvoPointCloud> pc_edge_raw(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::DSO_EDGES, 8.0f));
+      if (pc_edge_raw->size() < 300) {
+        pc_edge_raw.reset(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::CV_FAST, 30.0f));  
+      }
 
         
       if (j > 0) {
@@ -105,8 +179,9 @@ void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_sel
         cvo::CvoPointCloud::transform(pose_fi_to_fj, *pc_edge_raw, *pc_edge_raw);
       }
       *pc_edge += *pc_edge_raw;
-      if (!is_edge_only)
+      if (!is_edge_only) {
         *pc_full += *pc_full_raw;
+      }
     }
 
 
@@ -750,6 +825,7 @@ int main(int argc, char** argv) {
   std::cout<<"Read point clouds...\n";
   std::map<int, cvo::CvoFrame::Ptr> frames;
   std::map<int, std::shared_ptr<cvo::CvoPointCloud>> pcs;
+  std::map<int, std::vector<bool>> inliers;
   if (is_doing_ba || is_store_pcd_each_frame || is_doing_pgo ||  (is_global_registration && !is_read_loop_closure_poses_from_file)) {
     if (std::strcmp(data_type.c_str(), "tartan_rgbd") == 0) {
 

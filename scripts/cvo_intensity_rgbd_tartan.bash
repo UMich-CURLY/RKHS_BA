@@ -1,8 +1,8 @@
-#build_dir=build
-build_dir=build_debug
+build_dir=build
+#build_dir=build_debug
 
 export CUDA_VISIBLE_DEVICES=0
-cd $build_dir && make -j && cd .. 
+cd $build_dir && make -j6 && cd .. 
 
 date=$1
 clear
@@ -10,11 +10,44 @@ clear
 disk="/home/rayzhang/media/"
 
 
-    
-skylabel=(-1 -1 -1 -1)
-seqs=(SH003 SH005 SH006 SH000)
+
+
+skylabel=(-1 196)
+seqs=(carwelding abandonedfactory)
+index=(P004 P006)
+
 for ind in ${!seqs[@]}
 do
+    i=${seqs[ind]}
+    sky=${skylabel[ind]}
+    pind=${index[ind]}
+    folder=tartan_rgbd_test_${i}_${date}
+    # dataset_folder=${disk}/tartanair/$i/
+    dataset_folder=${disk}/tartanair/$i/Easy/$pind/
+
+    result=tartan_rgbd_${i}_${pind}_${date}.txt 
+
+    echo " Current Seq: ${i} ${difficulty} with sky label ${sky} ${pind}"        
+    rm -rf $folder
+    mkdir -p $folder
+    rm *.pcd
+    
+    #gdb -ex run --args \
+    ./$build_dir/bin/cvo_align_gpu_rgbd_tartan $dataset_folder cvo_params/cvo_outdoor_intensity_params.yaml \
+                                          $folder/$result 0 30000  $sky 0.025
+
+    python scripts/xyzq2kitti.py $folder/$result $folder/tracking_kitti.txt    
+    mv $folder/$result  $folder/tracking.txt
+    #cp $dataset_folder/poses.txt $folder/gt.txt
+    break
+done
+
+    
+skylabel=(-1 )
+seqs=(SH003 )
+for ind in ${!seqs[@]}
+do
+    break
     i=${seqs[ind]}
     sky=${skylabel[ind]}
     #pind=${index[ind]}
@@ -27,10 +60,10 @@ do
     
     gdb -ex run --args \
     ./$build_dir/bin/cvo_align_gpu_rgbd_tartan $dataset_folder cvo_params/cvo_outdoor_params.yaml \
-                                          tartan_rgbd_test_${i}_${date}.txt 0 30000  $sky
+                                          tartan_rgbd_test_${i}_${date}.txt 0 30000  $sky 0.025
 
-    
-    mv tartan_rgbd_test_${i}_${date}.txt  $folder/${seq}.txt
+    python scripts/xyzq2kitti.py tartan_rgbd_test_${i}_${date}.txt $folder/tracking_kitti.txt
+    mv tartan_rgbd_test_${i}_${date}.txt  $folder/tracking.txt
     #cp $dataset_folder/poses.txt $folder/gt.txt
 
 done

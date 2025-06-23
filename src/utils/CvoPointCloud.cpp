@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <string>
 #include <fstream>
 #include "utils/def_assert.hpp"
@@ -64,8 +65,8 @@ namespace cvo{
       return false;
 
     
-    if (xyz.norm() > 55) // 55
-      return false;
+    //if (xyz.norm() > 55) // 55
+    //  return false;
 
     return true;
   }
@@ -458,7 +459,8 @@ namespace cvo{
   template <typename DepthType>
   CvoPointCloud::CvoPointCloud(const ImageRGBD<DepthType> & raw_image,
                                const Calibration &calib,
-                               PointSelectionMethod pt_selection_method){
+                               PointSelectionMethod pt_selection_method,
+                               DepthType max_depth){
 
     const cv::Mat & rgb_raw_image = raw_image.image();
     const std::vector<DepthType> & depth_image = raw_image.depth_image();
@@ -503,6 +505,9 @@ namespace cvo{
         xyz(1) = (v-intrinsic(1,2)) * xyz(2) / intrinsic(1,1);
 
         if (!is_good_point(xyz))
+          continue;
+
+        if (xyz.norm() > (float)(max_depth))
           continue;
 
         point.x = xyz(0);
@@ -562,13 +567,15 @@ namespace cvo{
 
   template 
   CvoPointCloud::CvoPointCloud(const ImageRGBD<float> & raw_image,
-                                      const Calibration &calib,
-                                      PointSelectionMethod pt_selection_method);
+                               const Calibration &calib,
+                               PointSelectionMethod pt_selection_method,
+                               float max_depth);
   
   template 
   CvoPointCloud::CvoPointCloud(const ImageRGBD<uint16_t> & raw_image,
-                                         const Calibration &calib,
-                                         PointSelectionMethod pt_selection_method);
+                               const Calibration &calib,
+                               PointSelectionMethod pt_selection_method,
+                               uint16_t max_depth);
   
 
   
@@ -720,7 +727,8 @@ namespace cvo{
   CvoPointCloud::CvoPointCloud(const ImageStereo & raw_image,
                                const Calibration &calib,
                                PointSelectionMethod pt_selection_method,
-                               const std::unordered_set<int> * exclude_labels) {
+                               const std::unordered_set<int> * exclude_labels,
+                               float max_depth) {
 
     const cv::Mat & left_image = raw_image.image();
     const std::vector<float> & left_disparity = raw_image.disparity();
@@ -752,7 +760,8 @@ namespace cvo{
                                                                                      xyz );
       //std::cout<<"TraceStatus is "<<trace_status<<"\n";
       if (trace_status == StaticStereo::TraceStatus::GOOD && 
-          is_good_point (xyz, uv, h, w) 
+          is_good_point (xyz, uv, h, w) &&
+          xyz.norm() < max_depth
           //is_good_point(xyz)
           ) {
         int u = uv.first;
@@ -1615,6 +1624,22 @@ namespace cvo{
       points_[index].geometric_type[1] = geometry_type(1);
     }
     return 0;
+  }
+
+  void CvoPointCloud::filter_points(const std::vector<bool> & inliers) {
+    if (inliers.size()!=points_.size())
+      return;
+    auto new_end = std::remove_if(
+                                  points_.begin(), 
+                                  points_.end(),
+                                  [&inliers, index = 0](const auto&) mutable {
+                                    return !inliers[index++];  // Remove if flag is false
+                                  }
+                                  );
+
+    // Erase the "removed" elements
+    points_.erase(new_end, points_.end());
+    num_points_ = points_.size();
   }
 
 

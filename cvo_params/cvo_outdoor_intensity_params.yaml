@@ -14,7 +14,7 @@ c_ell: 0.075
 c_sigma: 1 
 s_ell: 0.1 #0.15 #0.04
 s_sigma: 1 #0.7
-MAX_ITER: 100000
+MAX_ITER: 10000
 min_step: 0.000001
 max_step: 0.01
 eps: 0.00005
@@ -30,7 +30,7 @@ is_dense_kernel: 0
 is_full_ip_matrix: 0
 is_using_geometry: 1
 is_using_intensity: 1
-is_using_semantics: 1
+is_using_semantics: 0
 is_using_range_ell: 0
 is_using_kdtree: 0 #1
 nearest_neighbors_max: 256 #20
@@ -38,8 +38,8 @@ is_using_geometric_type: 1
 # for irls solver
 multiframe_using_cpu: 0
 multiframe_num_neighbors: 256 #256
-multiframe_max_iters: 200 #20 
-multiframe_ell_init: 0.5 #0.05
+multiframe_max_iters: 100 #20 
+multiframe_ell_init: 0.1 #0.05
 multiframe_ell_min: 0.025 #0.025 #1.0
 multiframe_ell_decay_rate:  0.95
 multiframe_iterations_per_ell: 20

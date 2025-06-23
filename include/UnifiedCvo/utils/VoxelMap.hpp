@@ -44,6 +44,7 @@ namespace cvo
         float yc;
         float zc;
 
+      bool selected = false;
         bool operator==(const VoxelCoord& other) const {
           return (std::lrint(100 * xc) == std::lrint(other.xc * 100)
                   && std::lrint(100 * yc) == std::lrint( other.yc * 100)

@@ -8,6 +8,7 @@
 #include <boost/filesystem.hpp>
 //#include <opencv2/opencv.hpp>
 #include "dataset_handler/TartanAirHandler.hpp"
+#include "utils/ImageDownsampler.hpp"
 //#include "graph_optimizer/Frame.hpp"
 #include "utils/Calibration.hpp"
 #include "utils/CvoPointCloud.hpp"
@@ -37,6 +38,8 @@ int main(int argc, char *argv[]) {
   std::cout<<"start int "<<start_frame<<"\n";
   int max_num = std::stoi(argv[5]);
   int sky_label = std::stoi(argv[6]);
+
+  float voxel_size = std::stof(argv[7]);
 
 
   
@@ -80,12 +83,25 @@ int main(int argc, char *argv[]) {
 
   }
     
-  std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_raw,
+  std::shared_ptr<cvo::CvoPointCloud> source_edge(new cvo::CvoPointCloud(*source_raw,
                                                                     calib
-                                                                    //, cvo::CvoPointCloud::CV_FAST
-                                                                    //								    ));
-								    ,cvo::CvoPointCloud::DSO_EDGES
+                                                                    , cvo::CvoPointCloud::CV_FAST//));
+								    //,cvo::CvoPointCloud::DSO_EDGES
                                                                     ));
+  std::shared_ptr<cvo::CvoPointCloud> source_full(new cvo::CvoPointCloud(*source_raw,
+                                                                         calib
+                                                                         , cvo::CvoPointCloud::FULL//));
+								    //,cvo::CvoPointCloud::DSO_EDGES
+
+                                                                         ));
+  std::unordered_set<const cvo::CvoPoint *> selected_pts;  
+  std::shared_ptr<cvo::CvoPointCloud> source = cvo::voxel_downsample(source_edge,
+                                                                     voxel_size,
+                                                                     selected_pts,
+                                                                     cvo::CvoPointCloud::GeometryType::EDGE);
+
+  
+  
   //19, semantics_source,
 
   source->write_to_color_pcd(std::to_string(0)+".pcd");  
@@ -121,14 +137,30 @@ int main(int argc, char *argv[]) {
     
 
     //std::shared_ptr<cvo::Frame> target(new cvo::Frame(i+1, rgb, dep, calib,1));
-    std::shared_ptr<cvo::CvoPointCloud> target(new cvo::CvoPointCloud(*target_raw, calib,
-                                                                      //cvo::CvoPointCloud::CV_FAST));
-                                                                      cvo::CvoPointCloud::DSO_EDGES));
+    std::shared_ptr<cvo::CvoPointCloud> target_full(new cvo::CvoPointCloud(*target_raw,
+                                                                         calib
+                                                                         , cvo::CvoPointCloud::FULL//));
+								    //,cvo::CvoPointCloud::DSO_EDGES
+                                                                    ));
+    
+    std::shared_ptr<cvo::CvoPointCloud> target_edge(new cvo::CvoPointCloud(*target_raw, calib,
+                                                                      cvo::CvoPointCloud::CV_FAST));
+                                                                      //                                                                cvo::CvoPointCloud::DSO_EDGES));
+  std::unordered_set<const cvo::CvoPoint *> target_selected_pts;  
+  std::shared_ptr<cvo::CvoPointCloud> target = cvo::voxel_downsample(target_edge,
+                                                                     voxel_size,
+                                                                     target_selected_pts,
+                                                                     cvo::CvoPointCloud::GeometryType::EDGE);
+    
+
+    
     //if (i == 0){
     //std::cout<<"Write first pcd\n";
     //target->write_to_color_pcd(std::to_string(i+1)+".pcd");
         // }
     std::cout<<"First point is "<<target->at(0).transpose()<<std::endl;
+
+    
 
     // std::cout<<"reading "<<files[cur_kf]<<std::endl;
 
@@ -173,7 +205,7 @@ int main(int argc, char *argv[]) {
       init_param.ell_init = ell_init;
       init_param.ell_decay_rate = ell_decay_rate;
       init_param.ell_decay_start = ell_decay_start;
-      
+      init_param.is_using_geometric_type = 0;
       cvo_align.write_params(&init_param);
       
     }

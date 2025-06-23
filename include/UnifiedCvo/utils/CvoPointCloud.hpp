@@ -62,14 +62,16 @@ namespace cvo {
     CvoPointCloud(const ImageStereo & left_raw_image,
                   const Calibration &calib,
                   PointSelectionMethod pt_selection_method=CV_FAST,
-                  const std::unordered_set<int> * exclude_labels=nullptr);
+                  const std::unordered_set<int> * exclude_labels=nullptr,
+                  float max_depth=50.0);
     
 
     /// Constructor for rgbd image
     template <typename DepthType>
     CvoPointCloud(const ImageRGBD<DepthType> & rgb_raw_image,
                   const Calibration &calib,
-                  PointSelectionMethod pt_selection_method=CV_FAST);
+                  PointSelectionMethod pt_selection_method=CV_FAST,
+                  DepthType max_depth=50.0);
 
     /// Constructor for lidar input
     CvoPointCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr pc,
@@ -138,6 +140,8 @@ namespace cvo {
     std::vector<cvo::CvoPoint> get_points() const {return points_;}
     const cvo::CvoPoint & point_at(unsigned int index) const {return points_.at(index);}
     cvo::CvoPoint & point_at(unsigned int index) {return points_.at(index);}
+
+    void filter_points(const std::vector<bool> & inliers);
     
     int num_points() const {return num_points_;}
     int size() const {return num_points_;}

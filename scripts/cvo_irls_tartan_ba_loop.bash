@@ -15,10 +15,13 @@ disk="/home/rayzhang/media/"
 for difficulty in Easy #Hard
 do
     echo "new seq $i"
-    skylabel=(130 196 196 )
+    skylabel=( -1 196 )
+    seqs=(  carwelding abandonedfactory )
+    index=( P004 P006)
     
-    seqs=(soulcity abandonedfactory seasonsforest)
-    index=(P001 P005 P002)
+    #skylabel=(130 196 -1)
+    #seqs=(soulcity abandonedfactory carwelding)
+    #index=(P001 P006 P004)
 
     for ind in ${!seqs[@]}
     do
@@ -45,9 +48,9 @@ do
             --tracking_traj_file $folder/tracking_input.txt \
             --loop_closure_input_file $folder/lc.txt \
             --BA_traj_file $folder/ba.txt \
-            --is_edge_only 1 \
+            --is_edge_only 0 \
             --start_ind 0 \
-            --max_last_ind 10000 \
+            --max_last_ind 100000 \
             --cov_scale_t 1.0 \
             --cov_scale_r 0.05 \
             --num_merging_sequential_frames 0 \
@@ -55,23 +58,25 @@ do
             --is_read_loop_closure_poses_from_file 0 \
             --is_store_pcd_each_frame 0 \
             --is_global_registration 1 \
-            --is_doing_ba 1
+            --is_doing_ba 0  #> log.txt
         
         #gdb -ex run --args \
         #./build/bin/cvo_irls_tartan_odom $dataset_folder cvo_params/cvo_outdoor_params.yaml cvo_calib_deep_depth.txt 4 tracking.txt ba.txt 0 0 100000 $sky # > log_tartan_rgbd_${difficulty}_${i}.txt
         mv *.pcd $folder/
-        mv tracking.txt err_wrt_iters_*.txt groundtruth.txt $folder/
+        mv tracking.txt err_wrt_iters_*.txt log.txt groundtruth.txt pgo.g2o loop*.txt $folder/
         cp ${dataset_folder}/pose_left.txt $folder/
 
         # convert traj to kitti format
         python3 scripts/xyzq2kitti.py ${folder}/groundtruth.txt  ${folder}/groundtruth_kitti.txt
         python3 scripts/xyzq2kitti.py ${folder}/tracking.txt  ${folder}/tracking_kitti.txt
         python3 scripts/xyzq2kitti.py ${folder}/ba.txt  ${folder}/ba_kitti.txt
+	python3 scripts/g2o_to_xyzq.py ${folder}/pgo.g2o $folder/pgo.txt
         #python3 /home/rayzhang/.local/lib/python3.6/site-packages/evo/main_traj.py kitti --ref ${folder}/groundtruth_kitti.txt ${folder}/tracking_kitti.txt   ${folder}/ba_kitti.txt  -p --plot_mode xyz
 
         #mv log_tartan_rgbd_${difficulty}_${i}.txt $folder
+	break
         sleep 3
-        break
+        
     done
 done
 
@@ -84,7 +89,7 @@ make -j
 cd ..
 
 date=$1
-clear
+#clear
 
     #skylabel=(196 112 -- 130  196 146 130)
     seqs=( 03 )

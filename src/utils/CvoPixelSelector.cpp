@@ -471,7 +471,7 @@ namespace cvo
       }
       //cv::imshow("heat map", heatmap);
       //cv::waitKey(200);
-      cv::imwrite("stereo_selected_pixels.png", heatmap);
+      cv::imwrite("dso_selected_pixels.png", heatmap);
       
     }
 
