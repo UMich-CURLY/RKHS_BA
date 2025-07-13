@@ -196,7 +196,7 @@ namespace cvo {
       
       /// edges
       std::unordered_set<const cvo::CvoPoint *> selected_pts;
-      std::shared_ptr<cvo::CvoPointCloud> pc = voxel_downsample(pc_edge, leaf_size / 5, selected_pts,
+      std::shared_ptr<cvo::CvoPointCloud> pc = voxel_downsample(pc_edge, leaf_size / 3, selected_pts,
                                                                 cvo::CvoPointCloud::GeometryType::EDGE);
       /// surface
       std::shared_ptr<cvo::CvoPointCloud> pc_surface = voxel_downsample(pc_full, leaf_size, selected_pts,

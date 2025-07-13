@@ -15,13 +15,13 @@ disk="/home/rayzhang/media/"
 for difficulty in Easy #Hard
 do
     echo "new seq $i"
-    skylabel=( -1 196 )
-    seqs=(  carwelding abandonedfactory )
-    index=( P004 P006)
+    skylabel=( 196 )
+    seqs=(  abandonedfactory )
+    index=( P006)
     
-    #skylabel=(130 196 -1)
-    #seqs=(soulcity abandonedfactory carwelding)
-    #index=(P001 P006 P004)
+    #skylabel=(-1 130 196 )
+    #seqs=(carwelding soulcity abandonedfactory)
+    #index=(P004 P001 P006)
 
     for ind in ${!seqs[@]}
     do
@@ -58,12 +58,16 @@ do
             --is_read_loop_closure_poses_from_file 0 \
             --is_store_pcd_each_frame 0 \
             --is_global_registration 1 \
-            --is_doing_ba 0  #> log.txt
+            --is_doing_ba 1 \
+            --is_depth_filtering 1 \
+            --depth_normal_ell 0.01 \
+            --depth_dir_ell 0.25 \
+            --pcd_dir $folder
         
         #gdb -ex run --args \
         #./build/bin/cvo_irls_tartan_odom $dataset_folder cvo_params/cvo_outdoor_params.yaml cvo_calib_deep_depth.txt 4 tracking.txt ba.txt 0 0 100000 $sky # > log_tartan_rgbd_${difficulty}_${i}.txt
         mv *.pcd $folder/
-        mv tracking.txt err_wrt_iters_*.txt log.txt groundtruth.txt pgo.g2o loop*.txt $folder/
+        mv tracking.txt tracking.kitti err_wrt_iters_*.txt log.txt groundtruth.txt pgo.* loop*.txt $folder/
         cp ${dataset_folder}/pose_left.txt $folder/
 
         # convert traj to kitti format
@@ -74,7 +78,7 @@ do
         #python3 /home/rayzhang/.local/lib/python3.6/site-packages/evo/main_traj.py kitti --ref ${folder}/groundtruth_kitti.txt ${folder}/tracking_kitti.txt   ${folder}/ba_kitti.txt  -p --plot_mode xyz
 
         #mv log_tartan_rgbd_${difficulty}_${i}.txt $folder
-	break
+	#break
         sleep 3
         
     done

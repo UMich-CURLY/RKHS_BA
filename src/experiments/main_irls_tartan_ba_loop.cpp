@@ -1,5 +1,6 @@
 #include <iostream>
 #include <list>
+#include <sys/types.h>
 #include <vector>
 #include <utility>
 #include <string>
@@ -34,7 +35,8 @@
 #include "utils/SymbolHash.hpp"
 #include "utils/g2o_parser.hpp"
 #include "utils/LidarPointDownsampler.hpp"
-
+#include "utils/geometric_filter.hpp"
+#include "utils/PointCloudIO.hpp"
 using namespace std;
 
 extern template class cvo::VoxelMap<pcl::PointXYZRGB>;
@@ -60,70 +62,39 @@ extern template class cvo::VoxelMap<pcl::PointXYZI>;
 //   outfile.close();
 //}
 
-void tracking_inliers(
+
+void tracking_inliers(cvo::CvoGPU & cvo_align,
+                      std::vector<std::shared_ptr<cvo::CvoPointCloud>> & pcs_full,
                       std::map<int, std::shared_ptr<cvo::CvoPointCloud>> pcs,
-                      const cvo::aligned_vector<Eigen::Matrix4d> & tracking_poses,
-                      std::map<int, std::vector<bool>> & inliers,
-                      
+                      cvo::aligned_vector<Eigen::Matrix4d> & tracking_poses,
+                      int num_neighbors_to_filter,
+                      float depth_normal_ell, float depth_dir_ell,
+                      std::map<int, std::vector<bool>> & inliers
                       ) {
+  for (auto && [id, pc]: pcs) {
 
-  const cvo::CvoPointCloud & kf = *pcs[0];
-  Eigen::Matrix3f non_isotropic_kernel= Eigen::Matrix3f::Identity();
-  non_isotropic_kernel(0,0) = depth_normal_ell;
-  non_isotropic_kernel(1,1) = depth_normal_ell;
-  non_isotropic_kernel(2,2) = depth_dir_ell;    
-  std::cout<<"kernel is "<<non_isotropic_kernel<<std::endl;
-  depths.resize(kf.size());
-  weights.resize(kf.size());
-  for (int i = 1; i < total_inds; i ++) {
+    if (inliers.find(id) == inliers.end())
+      inliers[id] = std::vector<bool>();
+    for (int i = std::max(0, id - num_neighbors_to_filter);
+         i < std::min(pcs_full.size(), (size_t)(id+num_neighbors_to_filter+1));
+         i++) {
+      if (i == id) continue;
 
-    Eigen::Matrix4f T_s = poses[0];
-    Eigen::Matrix4f T_t = poses[i];
-    Eigen::Matrix4f T_t2s = T_t.inverse() * T_s;
-    Eigen::Matrix4f T_s2t = T_s.inverse() * T_t;
-    std::cout<<"\nT_s\n"<<T_s
-             <<"\nT_t\n"<<T_t
-             <<"\nT_t2s\n"<<T_t2s
-             <<"\nT_s2t\n"<<T_s2t<<std::endl;
-
-    cvo::Association association;
-    cvo_align.compute_association_gpu(kf,
-                                      *pcs[i],
-                                      T_t2s,
-                                      non_isotropic_kernel,
-                                      association
-                                      );
-    std::cout<<" non kf "<<i<<" has nonzeros "<<association.pairs.nonZeros()<<std::endl;
-
-    cvo::CvoPointCloud pc_t_in_s(pcs[0]->num_features(),
-                                 pcs[0]->num_classes()
-                                 );
-    cvo::CvoPointCloud::transform(T_s2t,
-                                  *pcs[i],
-                                  pc_t_in_s
-                                  );
-
-    for (int k=0; k<association.pairs.outerSize(); ++k)
-    {
-      for (Eigen::SparseMatrix<float, Eigen::RowMajor>::InnerIterator it(association.pairs,k); it; ++it) {
-
-        int idx1 = it.row();
-        int idx2 = it.col();
-        float val = it.value();
-        depths[idx1].push_back(pc_t_in_s.at(idx2)(2));
-        weights[idx1].push_back(val);
-        if (idx1 == 2349)
-          std::cout<<"j="<<idx2<<", weght is "<<weights[idx1][weights[idx1].size()-1]<<std::endl;
+      std::cout<<"Depth filter between "<<id<<", "<<i<<"\n";
+      
+      if (inliers.find(i) == inliers.end())
+        inliers[i] = std::vector<bool>();
+      
+      if (pcs_full[i]->size() > 0) {
+        
+        match_two_frame(cvo_align, *pcs[id], *pcs_full[i],
+                        depth_normal_ell, depth_dir_ell,
+                        tracking_poses[id], tracking_poses[i],
+                        false,
+                        inliers[id],inliers[i]);
       }
     }
   }
-
-
-  for (auto&& [ ind, pc ]: pcs) {
-
-    
-  }
-  
 }
 
 void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_selected_frames,
@@ -135,8 +106,10 @@ void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_sel
                                                 float voxel_size,
                                                 int is_edge_only,
                                                 // results
+                                                std::vector<std::shared_ptr<cvo::CvoPointCloud>> & pcs_full,
                                                 std::map<int, std::shared_ptr<cvo::CvoPointCloud>> & pcs) {
   //                                                    std::vector<cvo::CvoFrame::Ptr> & frames) {
+  pcs_full.resize(dataset.get_total_number());
   for (auto i : result_selected_frames) {
     //for (int i = 0; i<gt_poses.size(); i++) {
 
@@ -159,14 +132,16 @@ void read_and_downsample_sequentail_rgbd_frames(const std::set<int> & result_sel
                                     false));
 
       std::shared_ptr<cvo::CvoPointCloud> pc_full_raw;
-      if (!is_edge_only) {
-        pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL, 8.0f));
-        if (pc_full_raw->size() < 300) {
-          pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL, 30.0f));     
-        }
-
-        // filter_points(pc_full_raw);
+      // if (!is_edge_only) {
+      pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL, 8.0f));
+      if (pc_full_raw->size() < 300) {
+        pc_full_raw.reset(new cvo::CvoPointCloud(*raw,  calib, cvo::CvoPointCloud::FULL, 30.0f));     
       }
+
+      pcs_full[i+j] = pc_full_raw;
+      
+      // filter_points(pc_full_raw);
+      // }
       std::shared_ptr<cvo::CvoPointCloud> pc_edge_raw(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::DSO_EDGES, 8.0f));
       if (pc_edge_raw->size() < 300) {
         pc_edge_raw.reset(new cvo::CvoPointCloud(*raw, calib, cvo::CvoPointCloud::CV_FAST, 30.0f));  
@@ -291,7 +266,7 @@ void write_loop_closure_pcds(std::map<int, cvo::CvoFrame::Ptr> & frames,
     cvo::CvoPointCloud::transform(pose_f, *frames[f2]->points, new_pc);
     new_pc += *frames[1]->points;
 
-    new_pc.write_to_pcd(name_prefix + "_loop_"+std::to_string(f1)+"_"+std::to_string(f2)+".pcd");
+    new_pc.write_to_color_pcd(name_prefix + "_loop_"+std::to_string(f1)+"_"+std::to_string(f2)+".pcd");
     
   }
 }
@@ -424,11 +399,15 @@ init_param.is_global_angle_registration = true;
   std::ofstream f(registration_result_file);
   double time = 0;
   for (int i = 0; i < loop_closures.size(); i++) {
-    Eigen::Matrix4f result;
+    Eigen::Matrix4f result = Eigen::Matrix4f::Identity();
     double time_curr;
     Eigen::Matrix4f init_guess_inv = Eigen::Matrix4f::Identity();
-
     auto p = loop_closures[i];
+
+    std::string fname = "loop_closure_before_"+std::to_string(p.first)+"_"+std::to_string(p.second)+".pcd";
+    cvo::write_transformed_pc<cvo::CvoPoint>(*pcs.at(p.first), *pcs.at(p.second), result, fname);
+
+
     cvo_align.align(*pcs.at(p.first), *pcs.at(p.second), init_guess_inv, result, nullptr, &time_curr);
 
     lc_poses_f1_to_f2[i] = result;
@@ -436,6 +415,9 @@ init_param.is_global_angle_registration = true;
     std::cout<<"Finish running global registration between "<<p.first<<" and "<<p.second<<", result is\n"
              <<result<<"\n ground truth between "<<p.first<<" and "<<p.second<<" is \n"
              <<gt_poses[p.first].inverse() * gt_poses[p.second]<<"\n\n";
+    fname = "loop_closure_after_"+std::to_string(p.first)+"_"+std::to_string(p.second)+".pcd";
+    cvo::write_transformed_pc<cvo::CvoPoint>(*pcs.at(p.first), *pcs.at(p.second), result, fname);
+
 
     f<<"====================================\nFinish running global registration between "<<p.first<<" and "<<p.second<<", result is\n"
      <<result<<"\n ground truth between "<<p.first<<" and "<<p.second<<" is \n"
@@ -641,8 +623,8 @@ void write_transformed_pc(std::map<int, cvo::CvoFrame::Ptr> & frames,
     pc_xyz_all += pc_xyz_curr;
 
   }
-  //pcl::io::savePCDFileASCII(fname, pc_all);
-  pcl::io::savePCDFileASCII(fname, pc_xyz_all);
+  pcl::io::savePCDFileASCII(fname, pc_all);
+  //pcl::io::savePCDFileASCII(fname, pc_xyz_all);
 }
 
 
@@ -683,6 +665,8 @@ int main(int argc, char** argv) {
   // Add arguments in EXACT order (positional)
   program.add_argument("--data_type").help("Type of data: [RGBD | STEREO]");
   program.add_argument("--data_path").help("Path to input data directory");
+  program.add_argument("--pcd_dir").help("Path to all the cached pcd files");
+  
   program.add_argument("--sky_label").help("Sky label to filter out").scan<'i', int>();  
   program.add_argument("--cvo_param_file").help("CVO parameter configuration file");
   program.add_argument("--num_neighbors_per_node").help("Forward neighbors count").scan<'i', int>();
@@ -700,6 +684,10 @@ int main(int argc, char** argv) {
   program.add_argument("--is_store_pcd_each_frame").help("Store per-frame PCD (0/1)").scan<'i', int>();
   program.add_argument("--is_global_registration").help("Global registration (0/1)").scan<'i', int>();
   program.add_argument("--is_doing_ba").help("Enable Bundle Adjustment (0/1)").scan<'i', int>();
+  program.add_argument("--is_depth_filtering").help(" whether use cvo association").scan<'i', int>();
+  program.add_argument("--depth_normal_ell").help(" depth normal ell in depth_filter").scan<'g', double>();
+  program.add_argument("--depth_dir_ell").help(" depth dir ell in depth_filter").scan<'g', double>();
+  
 
   try {
     program.parse_args(argc, argv);
@@ -713,6 +701,8 @@ int main(int argc, char** argv) {
   // Extract values (variable names match original)
   std::string data_type                            = program.get<std::string>("--data_type");
   std::string data_path = program.get<std::string>("--data_path");
+  std::string pcd_dir = program.get<std::string>("--pcd_dir");
+  
   int sky_label = program.get<int>("--sky_label");
   std::string cvo_param_file                       = program.get<std::string>("--cvo_param_file");
   int         num_neighbors_per_node               = program.get<int>("--num_neighbors_per_node");
@@ -730,6 +720,9 @@ int main(int argc, char** argv) {
   int         is_store_pcd_each_frame              = program.get<int>("--is_store_pcd_each_frame");
   int         is_global_registration               = program.get<int>("--is_global_registration");
   int         is_doing_ba                          = program.get<int>("--is_doing_ba");
+  int         is_depth_filtering                   = program.get<int>("--is_depth_filtering");
+  double depth_normal_ell = program.get<double>("--depth_normal_ell");
+  double depth_dir_ell = program.get<double>("--depth_dir_ell");
 
   /// init data handler
   cvo::TartanAirHandler tartan(data_path);
@@ -816,14 +809,17 @@ int main(int argc, char** argv) {
     gt_pose_selected_vec.push_back(gt_poses[ind]);//insert(std::make_pair(ind, gt_poses[ind]));
   std::string gt_fname("groundtruth.txt");
   cvo::write_traj_file_kitti_format<double, 4, Eigen::ColMajor>(gt_fname,gt_poses, result_selected_frames);
-  std::string track_fname("tracking.txt");
+  std::string track_fname("tracking.kitti");
   cvo::write_traj_file_kitti_format<double, 4, Eigen::ColMajor>(track_fname, tracking_poses, result_selected_frames);
+  track_fname = "tracking.txt";
+  cvo::write_traj_file<double, 4, Eigen::ColMajor>(track_fname, tracking_poses);
   
   
   
   // read point cloud
   std::cout<<"Read point clouds...\n";
   std::map<int, cvo::CvoFrame::Ptr> frames;
+  std::vector<std::shared_ptr<cvo::CvoPointCloud>> pcs_full;
   std::map<int, std::shared_ptr<cvo::CvoPointCloud>> pcs;
   std::map<int, std::vector<bool>> inliers;
   if (is_doing_ba || is_store_pcd_each_frame || is_doing_pgo ||  (is_global_registration && !is_read_loop_closure_poses_from_file)) {
@@ -838,7 +834,18 @@ int main(int argc, char** argv) {
                                                  cvo_align.get_params().multiframe_downsample_voxel_size,
                                                  is_edge_only,
                                                 // results
+                                                 pcs_full,
                                                  pcs);
+      if (is_depth_filtering) {
+        tracking_inliers(cvo_align, pcs_full, pcs, tracking_poses, 1, (float)depth_normal_ell, (float)depth_dir_ell,
+                         inliers);
+        for (auto && [id,  pc] : pcs) {
+          std::cout<<"pc["<<id<<"] before filter "<<pc->size()<<" points, ";
+          pc->filter_points(inliers[id]);
+          std::cout<<" after fiter: "<<pc->size()<<" points\n";
+        }
+      }
+      pcs_full.clear();
       
     } else if (std::strcmp(data_type.c_str(), "tartan_stereo") == 0) {
       cvo::read_and_downsample_sequentail_stereo_frames(result_selected_frames, tartan, calib,
@@ -851,8 +858,16 @@ int main(int argc, char** argv) {
                                                         //,is_semantic
                                                         );
 
+    } else if (std::strcmp(data_type.c_str(), "raw_pcd") == 0) {
+      for (auto & id : result_selected_frames) {
+        pcl::PointCloud<cvo::CvoPoint> pc_pcl;
+        pcl::io::loadPCDFile<cvo::CvoPoint>(pcd_dir + "/" + std::to_string(id) +".pcd", pc_pcl);
+        std::shared_ptr<cvo::CvoPointCloud> pc(new cvo::CvoPointCloud(pc_pcl));
+        std::cout<<"read "<<pc->size()<<" points for pc["<<id<<"]\n";
+        pcs.insert(std::make_pair(id, pc));
+      }
     } else {
-      std::cerr<<"Unknown data type"<<data_type<<"\n";
+      std::cerr<<"Unknown data type\n";
       exit(-1);
     }
 
@@ -869,11 +884,18 @@ int main(int argc, char** argv) {
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr pc_all_ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
   for (auto && [ind, pc]: pcs) {
     Eigen::Matrix4f tracking_pose = tracking_poses[ind].cast<float>();
+    cvo::CvoPointCloud transformed(cvo::CvoPoint::FEATURE_DIMENSION,
+                                   cvo::CvoPoint::LABEL_DIMENSION);
+    cvo::CvoPointCloud::transform(tracking_pose, *pc, transformed);
     pcl::PointCloud<pcl::PointXYZRGB> pc_curr;
+    transformed.export_to_pcd<pcl::PointXYZRGB>(pc_curr);
+    /*
     pc_curr.resize(pc->size());
     #pragma omp parallel for
-    for (int j = 0; j < pc->size(); j++)
+    for (int j = 0; j < pc->size(); j++) {
       pc_curr[j].getVector3fMap() = tracking_pose.block(0,0,3,3) * pc->at(j) + tracking_pose.block(0,3,3,1);
+      pc_curr[j].rgb = pc->at(j).rgb;
+      }*/
     (*pc_all_ptr) += pc_curr;
   }
   pcl::io::savePCDFileASCII ("tracking.pcd", *pc_all_ptr);
@@ -897,7 +919,8 @@ int main(int argc, char** argv) {
   std::string lc_g2o("loop_closures.g2o");
   std::string pgo_g2o("pgo.g2o");    
   std::cout<<"Start PGO...\n";
-  pose_graph_optimization(tracking_poses, loop_closures,
+  if (is_doing_pgo)
+    pose_graph_optimization(tracking_poses, loop_closures,
                             lc_poses, lc_g2o,
                             BA_poses, 
                             cov_scale_t, cov_scale_r, num_neighbors_per_node,
@@ -908,6 +931,7 @@ int main(int argc, char** argv) {
   
   std::cout<<"Finish PGO...\n";  
   std::string pgo_fname("pgo.txt");
+  pgo_fname = "pgo.kitti";
   std::vector<cvo::Mat34d_row, Eigen::aligned_allocator<cvo::Mat34d_row>> pgo_poses;
   for (auto i : result_selected_frames) pgo_poses.push_back(BA_poses[i]);
   cvo::write_traj_file_kitti_format<double, 3, Eigen::RowMajor>(pgo_fname, pgo_poses);
@@ -915,16 +939,30 @@ int main(int argc, char** argv) {
   if (pcs.size())
     log_lc_pc_pairs(BA_poses, loop_closures, pcs, lc_prefix);
 
+
   std::cout << "Start construct BA CvoFrame\n";
-  std::vector<std::pair<int, int>> loop_closures_ba;  
+  std::vector<std::pair<int, int>> loop_closures_ba;
+  cvo::BinaryCommutativeMap<int> added_edges;  
   for (int i = 0; i < pgo_poses.size(); i++) {
-    for (int j = i+50; j < pgo_poses.size(); j++) {
+    for (int j = i+1;
+         j < i+4; //pgo_poses.size();
+         j++) {
       double dist = (pgo_poses[i].block<3,1>(0,3) - pgo_poses[j].block<3,1>(0,3)).norm();
-      if (dist < 1 ){
+      if (dist < 1 && added_edges.exists(i, j) == false ){
         std::cout<<"loop: dist betwee "<<i<<" and "<<j<<" is "<<dist<<"\n";
         loop_closures_ba.push_back(std::make_pair(i,j));
+        added_edges.insert(std::min(i, j), std::max(i, j), 1);
       }
     }
+  }
+  for (auto p : loop_closures) {
+    int i = p.first;
+    int j = p.second;
+    double dist = (pgo_poses[i].block<3,1>(0,3) - pgo_poses[j].block<3,1>(0,3)).norm();    
+    if ( added_edges.exists(i, j) == false ){
+      loop_closures_ba.push_back(std::make_pair(i,j));
+      added_edges.insert(std::min(i, j), std::max(i, j), 1);
+    }    
   }
   
   /// construct BA CvoFrame struct
@@ -943,6 +981,8 @@ int main(int argc, char** argv) {
   std::cout<<"Construct loop BA problem\n";
   ASSERT(frames.size() == gt_poses.size(), "frame size must be equal to gt_poses size");
   write_loop_closure_pcds( frames, loop_closures_ba, false, "before_ba_");
+  pgo_fname = "pgo.txt";
+  write_traj_file(pgo_fname, frames);  
   construct_loop_BA_problem(cvo_align,
                             loop_closures_ba,
                             frames, gt_pose_selected_vec, num_neighbors_per_node,

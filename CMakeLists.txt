@@ -961,7 +961,16 @@ target_include_directories(cvopoint_to_pcl PUBLIC
     #$<BUILD_INTERFACE:${UnifiedCvo_BINARY_DIR}/include>
     "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"                
     $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
-target_link_libraries(cvopoint_to_pcl cvo_utils pcl_common pcl_io cvo_gpu_lidar )
+  target_link_libraries(cvopoint_to_pcl cvo_utils pcl_common pcl_io cvo_gpu_lidar )
+
+  add_executable(cvopoint_to_rgb ${PROJECT_SOURCE_DIR}/src/experiments/main_cvopoint_to_rgb.cpp)
+target_include_directories(cvopoint_to_rgb PUBLIC
+    #$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}> 
+    #$<BUILD_INTERFACE:${UnifiedCvo_BINARY_DIR}/include>
+    "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"                
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
+target_link_libraries(cvopoint_to_rgb cvo_utils pcl_common pcl_io cvo_gpu_img )
+  
 
 add_executable(gicp_align_two ${PROJECT_SOURCE_DIR}/src/experiments/gicp_align_two.cpp)
 target_include_directories(gicp_align_two PUBLIC

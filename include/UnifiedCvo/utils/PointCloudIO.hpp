@@ -73,5 +73,30 @@ namespace cvo {
     pcl::io::savePCDFileASCII(fname, pc_xyz_all);
   }
 
+  template<typename PointT>
+  void write_transformed_pc(const cvo::CvoPointCloud & pc1,
+                            const cvo::CvoPointCloud & pc2,
+                            const Eigen::Matrix4f & T_f1_to_f2,
+                            std::string & fname) {
+                            
+    pcl::PointCloud<PointT> pc_all;
+    pcl::PointCloud<cvo::CvoPoint> pc_xyz_all;
+      //for (int i = start_frame_ind; i <= std::min((int)frames.size(), end_frame_ind); i++) {
+    cvo::CvoPointCloud new_pc2(pc2.num_features(), pc2.num_classes());
+    cvo::CvoPointCloud::transform(T_f1_to_f2, pc2, new_pc2);
+
+    //pcl::PointCloud<cvo::CvoPoint> pc1_pcl, pc2_pcl;    
+
+    
+    pcl::PointCloud<PointT> pc1_pcl, pc2_pcl;
+    
+    pc1.export_to_pcd<PointT>(pc1_pcl);
+    new_pc2.export_to_pcd<PointT>(pc2_pcl);
+    
+    pc1_pcl += pc2_pcl;
+
+    pcl::io::savePCDFileASCII(fname, pc1_pcl);
+  }
+
   
 }

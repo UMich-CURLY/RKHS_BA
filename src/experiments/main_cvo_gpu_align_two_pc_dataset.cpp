@@ -23,7 +23,8 @@
 #include "utils/ImageRGBD.hpp"
 #include "utils/VoxelMap.hpp"
 #include "argparse/argparse.hpp"
-
+#include "utils/PointCloudIO.hpp"
+#include "utils/geometric_filter.hpp"
 using namespace std;
 using namespace boost::filesystem;
 
@@ -190,6 +191,10 @@ int main(int argc, char *argv[]) {
   program.add_argument("--target_index").help("target frame index").scan<'i', int>();
   program.add_argument("--cvo_param_file").help("cvo param file");
   program.add_argument("--sky_index").help("sky index").scan<'i', int>();
+  program.add_argument("--is_depth_filtering").help(" whether use cvo association").scan<'i', int>();
+  program.add_argument("--depth_normal_ell").help(" depth normal ell in depth_filter").scan<'g', double>();
+  program.add_argument("--depth_dir_ell").help(" depth dir ell in depth_filter").scan<'g', double>();
+
 
   try {
     program.parse_args(argc, argv);
@@ -207,6 +212,9 @@ int main(int argc, char *argv[]) {
   int target_index = program.get<int>("--target_index");
   std::string cvo_param_file = program.get<std::string>("cvo_param_file");
   int sky_index = program.get<int>("--sky_index");
+  int         is_depth_filtering                   = program.get<int>("--is_depth_filtering");
+  double depth_normal_ell = program.get<double>("--depth_normal_ell");
+  double depth_dir_ell = program.get<double>("--depth_dir_ell");
 
   
 
@@ -397,6 +405,21 @@ int main(int argc, char *argv[]) {
   //cvo_align.align(*source, *target, init_guess, result);
     
   std::cout<<"Transform is "<<result <<"\n\n";
+
+  if (is_depth_filtering) {
+    std::string merged_name = "before_depth_filter.pcd";
+    cvo::write_transformed_pc<pcl::PointXYZRGB>(*source, *target, result, merged_name);
+    std::vector<bool> inliers_pc1, inliers_pc2;
+    match_two_frame(cvo_align, *source, *target,
+                    depth_normal_ell, depth_dir_ell,
+                    init_guess.cast<double>(), result.cast<double>(),
+                    true,
+                    inliers_pc1,inliers_pc2);
+    source->filter_points(inliers_pc1);
+    target->filter_points(inliers_pc2);
+    merged_name = "after_depth_filter.pcd";
+    cvo::write_transformed_pc<pcl::PointXYZRGB>(*source, *target, result, merged_name);
+  }
   
   cvo::CvoPointCloud new_pc(3, 19), old_pc(3, 19);
   cvo::CvoPointCloud::transform(init_guess, * target_full, old_pc);
