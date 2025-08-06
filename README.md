@@ -3,36 +3,38 @@
 This repository is an implementation for RKHS-BA.  It can perform global two-view and multi-view pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in TartanAir and Kitti dataset. Details are in the [RKHS-BA: A Robust Correspondence-Free Multi-View Registration Framework with Semantic Point Clouds](https://arxiv.org/abs/2403.01254). It is built on the code of [CVO](https://github.com/UMich-CURLY/unified_cvo) which performs two-view registration.
 
 Specifically, this repository provides:
-* GPU implentation of goemetric, color, and semantic based registration
-* CPU and GPU implementation of `cos` function angle computation that measures the overlap of two point clouds
-* Soft data association between any two pairs of points in the two point clouds given a guess of their relative pose
-
-And the following modules are under-development:
-* Multiframe point cloud registration
+* GPU implentation of goemetric, color, and semantic based registration, as well as global rotation registration
+* `cos` function angle computation that measures the overlap of two point clouds given their relative pose
+* GPU implementation of Multi-View Point Cloud Registration
 
 Stacked point clouds based on the resulting frame-to-frame trajectory:
 ![The stacked pointcloud based on CVO's trajectory](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/results/stacked_pointcloud.png "Stacked Point Cloud after registration")
 
-[Video](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing) on test results of KITTI and TUM:
+[Video](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing) on test results of KITTI Stereo and TUM RGB-D:
 [![Test results of KITTI and TUM](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/results/TUM_featureless.png)](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing)
+
+Frame-to-Frame tracking and large scale BA results on KITTI
+
+
+Largescale Lidar BA results on a biped robot
 
 ---
 
 ### Dependencies
 We recommend using this [Dockerfile](https://github.com/UMich-CURLY/docker_images/tree/cvo_dev/cvo_gpu) to get a prebuilt environment with all the following dependencies. 
 
-*  `cuda 10 or 11`  (already in docker)
-*  `gcc9` (already in docker)
-*  `SuiteParse` (already in docker)
-* `Sophus 1.0.0 release` (already in docker)
-* `Eigen 3.3.9` (already in docker)
-* `TBB` (already in docker)
-* `Boost 1.65` (already in docker)
-* `pcl 1.9.1` (already in docker)
-* `OpenCV3` or `OpenCV4` (already in docker)
-* `Ceres` (already in docker)
-* `Openmp` (already in docker)
-* `yaml-cpp 0.7.0` (already in docker)
+*  `cuda >= 10`  
+*  `gcc >= 9` 
+*  `SuiteParse` 
+* `Sophus 1.0.0 release` 
+* `Eigen >= 3.3.9` 
+* `TBB` 
+* `Boost >= 1.65` 
+* `pcl >= 1.9.1` 
+* `OpenCV >= 3` 
+* `Ceres` 
+* `Openmp` 
+* `yaml-cpp 0.7.0` 
 
 Note: As specified in the above [Dockerfile](https://github.com/UMich-CURLY/docker_images/tree/master/cvo_gpu) , 'pcl-1.9.1' need to be changed and compiled to get it working with cuda. 
 * `pcl/io/boost.h`: add `#include <boost/numeric/conversion/cast.hpp>` at the end of the file before `#endif`
@@ -72,6 +74,8 @@ Before registration (`before_align.pcd`) |  After registration (`after_align.pcd
 --- | ---
 ![stacking source.pcd and target.pcd before registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/before_align.png "Stacked Point Cloud before registration")  | ![stacking source.pcd and target.pcd after registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/after_align.png "Stacked Point Cloud before registration")
 
+#### Example of aligning four point clouds
+`bash scripts/cvo_irls_tartan_demo.bash`
 
 #### Frame-to-Frame Registration Demo on Kitti
 Make sure the folder of Kitti Stereo sequences contains the `cvo_calib.txt` and the parameter yaml file is specified. Now inside docker container:
@@ -83,16 +87,17 @@ Make sure the folder of Kitti Stereo sequences contains the `cvo_calib.txt` and 
 ---
 
 ### Installation 
-If you want to import Unified CVO in your CMAKE project
+If you want to import this repo in your CMAKE project
 * Install this library: `make install`
 * In your own repository's `CMakeLists.txt`:
  ```
  find_package(UnifiedCvo REQUIRED ) 
  target_link_libraries(${YOUR_LIBRARY_NAME}                                                                                                                                                                              
  PUBLIC                                                                                                                                     ${YOUR_OTHER_LINKED_LIBRARIES}                                                                                             
- UnifiedCvo::cvo_utils_lib
+ UnifiedCvo::cvo_utils
  UnifiedCvo::lie_group_utils
- UnifiedCvo::cvo_gpu_img_lib 
+ UnifiedCvo::cvo_gpu_img
+ UnifiedCvo::cvo_gpu_lidar
  UnifiedCvo::elas
  UnifiedCvo::tum
  UnifiedCvo::kitti
