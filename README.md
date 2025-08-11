@@ -1,6 +1,6 @@
 # RKHS-BA
 
-This repository is an implementation for RKHS-BA.  It can perform global two-view and multi-view pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in TartanAir and Kitti dataset. Details are in the [RKHS-BA: A Robust Correspondence-Free Multi-View Registration Framework with Semantic Point Clouds](https://arxiv.org/abs/2403.01254). It is built on the code of [CVO](https://github.com/UMich-CURLY/unified_cvo) which performs two-view registration.
+This repository is an implementation for RKHS-BA.  It can perform global two-view and multi-view pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in TartanAir and Kitti dataset. Details are in the [RKHS-BA: A Robust Correspondence-Free Multi-View Registration Framework with Semantic Point Clouds](https://arxiv.org/abs/2403.01254). It is built on our prior work, [CVO](https://github.com/UMich-CURLY/unified_cvo), which performs two-view registration.
 
 Specifically, this repository provides:
 * GPU implentation of goemetric, color, and semantic based registration, as well as global rotation registration
@@ -13,11 +13,8 @@ Stacked point clouds based on the resulting frame-to-frame trajectory:
 [Video](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing) on test results of KITTI Stereo and TUM RGB-D:
 [![Test results of KITTI and TUM](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/results/TUM_featureless.png)](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing)
 
-Frame-to-Frame tracking and large scale BA results on KITTI
-
-
 Largescale Lidar BA results on a biped robot
-
+![The Lidar point cloud map after large scale BA](https://github.com/UMich-CURLY/RKHS-BA/raw/dev/results/ba.png "Stacked Lidar point cloud maps after large-scale BA")
 ---
 
 ### Dependencies
@@ -75,6 +72,7 @@ Before registration (`before_align.pcd`) |  After registration (`after_align.pcd
 ![stacking source.pcd and target.pcd before registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/before_align.png "Stacked Point Cloud before registration")  | ![stacking source.pcd and target.pcd after registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/after_align.png "Stacked Point Cloud before registration")
 
 #### Example of aligning four point clouds
+
 `bash scripts/cvo_irls_tartan_demo.bash`
 
 #### Frame-to-Frame Registration Demo on Kitti

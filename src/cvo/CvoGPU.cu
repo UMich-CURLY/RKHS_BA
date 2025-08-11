@@ -960,7 +960,8 @@ namespace cvo{
                          SparseKernelMat * A_mat // the kernel matrix!
                          ) {
 
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + tid;
     if (i > a_size - 1)
       return;
     
@@ -976,7 +977,7 @@ namespace cvo{
     const CvoPoint * p_a =  &points_a[i];
 
     float a_to_sensor = sqrtf(p_a->x * p_a->x + p_a->y * p_a->y + p_a->z * p_a->z);
-    float l = compute_range_ell(ell, a_to_sensor , 1, 80 );
+    float l = cvo_params->is_using_range_ell? compute_range_ell(ell, a_to_sensor , 1, 80 ) : ell;
 
     float d2_thres=1, d2_c_thres=1, d2_s_thres=1;
     if (cvo_params->is_using_geometry)
@@ -991,6 +992,8 @@ namespace cvo{
 
     unsigned int num_inds = 0;
     //printf("a_size is %d, i=%d, b_size=%d, num_neighbors=%d\n", a_size, i, b_size, num_neighbors);
+
+    
     for (int j = 0; j < b_size ; j++) {
       int ind_b = j;
       if (num_inds == num_neighbors) break;
@@ -1075,6 +1078,8 @@ namespace cvo{
 
 
     }
+    
+    
     A_mat->nonzeros[i] = num_inds;
 
     if (cvo_params->multiframe_is_sorting_inner_product &&
@@ -1098,7 +1103,244 @@ namespace cvo{
 
   }
 
-  
+
+__device__ void update_top_k(float* affinities, int* indices, int& count, 
+                             float new_affinity, int new_index, 
+                             float threshold, int max_neighbors) {
+    if (new_affinity < threshold) return;
+    
+    if (count < max_neighbors) {
+        // Simply add to the list if there's space
+        affinities[count] = new_affinity;
+        indices[count] = new_index;
+        count++;
+    } else {
+        // Find the smallest affinity in current list
+        int min_idx = 0;
+        float min_val = affinities[0];
+        for (int i = 1; i < max_neighbors; i++) {
+            if (affinities[i] < min_val) {
+                min_val = affinities[i];
+                min_idx = i;
+            }
+        }
+        
+        // Replace if new value is larger
+        if (new_affinity > min_val) {
+            affinities[min_idx] = new_affinity;
+            indices[min_idx] = new_index;
+        }
+    }
+}
+
+  __device__ void sort_pairs(float* affinities, int* indices, int n) {
+    // Simple bubble sort (descending order)
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (affinities[j] < affinities[j + 1]) {
+                // Swap affinities
+                float tmp_f = affinities[j];
+                affinities[j] = affinities[j + 1];
+                affinities[j + 1] = tmp_f;
+                
+                // Swap indices
+                int tmp_i = indices[j];
+                indices[j] = indices[j + 1];
+                indices[j + 1] = tmp_i;
+            }
+        }
+    }
+}
+
+
+
+  #ifdef CUDA_SHARED_MEMORY
+  __global__
+  void fill_in_A_mat_gpu_shared_memory(const CvoParams * cvo_params,
+                         const CvoPoint * points_a,
+                         int a_size,
+                         const CvoPoint * points_b,
+                         int b_size,
+                         int num_neighbors,
+                         float ell,
+                         // output
+                         SparseKernelMat * A_mat // the kernel matrix!
+                         ) {
+
+
+    //__shared__ float    * shared_A_mat = ;
+    //__shared__ int      * shared_ind_row2col[];
+    extern __shared__ char shared_mem[];
+    CvoPoint* shared_b = (CvoPoint*)shared_mem;
+
+    int tid = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + tid;
+    if (i > a_size - 1)
+      return;
+    
+    float curr_max_ip = cvo_params->sp_thres;
+
+    float sigma2= cvo_params->sigma * cvo_params->sigma;
+    float c2 = cvo_params->c_ell * cvo_params->c_ell;
+    float c_sigma2 = cvo_params->c_sigma * cvo_params->c_sigma;
+    float s_ell = cvo_params->s_ell;
+    float s_sigma2 = cvo_params->s_sigma * cvo_params->s_sigma;
+    //printf("params_gpu_ are %f, %f, %f, %f\n",ell, sigma2, c2, s_ell);
+
+    const CvoPoint * p_a =  &points_a[i];
+
+    float a_to_sensor = sqrtf(p_a->x * p_a->x + p_a->y * p_a->y + p_a->z * p_a->z);
+    float l = cvo_params->is_using_range_ell? compute_range_ell(ell, a_to_sensor , 1, 80 ) : ell;
+
+    float d2_thres=1, d2_c_thres=1, d2_s_thres=1;
+    if (cvo_params->is_using_geometry)
+      d2_thres = -2.0*l*l*log(cvo_params->sp_thres/sigma2);
+    if (cvo_params->is_using_intensity)
+      d2_c_thres = -2.0*c2*log(cvo_params->sp_thres/c_sigma2);
+    if (cvo_params->is_using_semantics)
+      d2_s_thres = -2.0*s_ell*s_ell*log(cvo_params->sp_thres/s_sigma2 );
+    
+
+    const float * label_a = p_a ->label_distribution; //nullptr;
+
+    unsigned int num_inds = 0;
+    //printf("a_size is %d, i=%d, b_size=%d, num_neighbors=%d\n", a_size, i, b_size, num_neighbors);
+
+
+    constexpr int MAX_NEIGHBORS = 12;
+    float best_affinities[MAX_NEIGHBORS];
+    int best_indices[MAX_NEIGHBORS];
+    int count = 0;
+    
+    // Initialize buffers
+    for (int k = 0; k < MAX_NEIGHBORS; k++) {
+      best_affinities[k] = -FLT_MAX;
+      best_indices[k] = -1;
+    }
+
+   for (int tile_start = 0;  tile_start < b_size; tile_start += TILE_SIZE) {
+         // Load current tile
+        int tile_end = min(tile_start + TILE_SIZE, b_size);
+        int tile_size = tile_end - tile_start;
+        
+        for (int idx = tid; idx < tile_size; idx += blockDim.x) {
+            shared_b[idx] = points_b[tile_start + idx];
+        }
+        __syncthreads();  // Barrier for all threads  
+
+    
+        for (int j = 0; j < TILE_SIZE ; j++) {
+          const CvoPoint* p_b = &shared_b[j];
+            int global_idx = tile_start + j;
+            
+            // int ind_b = j;
+            //     if (num_inds == num_neighbors) break;
+            //const CvoPoint * p_b = &points_b[ind_b];
+      /*
+      if (i == 0) {
+        printf(" pointcloud_b.size is %d, num_neighbors is %d,  p_a[%d] is (%f, %f, %f), p_b[%d] is (%f, %f, %f\n)",    b_size, num_neighbors,
+               i, p_a->x,p_a->y, p_a->z,
+               ind_b, p_b->x, p_b->y, p_b->z);
+               }*/
+      float a = 1, sk=1, ck=1, k=1, geo_sim=1;
+      if (cvo_params->is_using_geometric_type) {
+        geo_sim = compute_geometric_type_ip(p_a->geometric_type,
+                                            p_b->geometric_type,
+                                            2
+                                            );
+        
+        /* for debug use
+        if (i == 0 )
+          printf("p_a is (%f, %f, %f), p_b is (%f, %f, %f), geo_sim is %f\n", p_a->x,p_a->y, p_a->z, p_b->x, p_b->y, p_b->z, geo_sim);
+        */
+        if(geo_sim < 0.01)
+          continue;        
+      }
+
+      
+      if (cvo_params->is_using_geometry) {
+        float d2 = (squared_dist( *p_b ,*p_a ));
+        if (d2 < d2_thres)
+          k= sigma2*exp(-d2/(2.0*l*l));
+        else continue;
+      }
+
+                              //if (i==0)  {
+                              /*
+                              float d2 = (squared_dist( *p_b ,*p_a ));
+        float d2_semantic = squared_dist<float>(p_a->label_distribution, p_b->label_distribution, NUM_CLASSES);
+          
+        printf("point_a is (%f,%f,%f), point_b with index %d is (%f,%f,%f), d2=%f,d2_thresh=%f, d2_semantic=%f, d2_semantic_thresh=%f \n", p_a->x, p_a->y, p_a->z, ind_b,  p_b->x, p_b->y, p_b->z,  d2, d2_thres, d2_semantic, d2_s_thres );
+                                                                                                                                         */
+                              //}
+      
+                              
+
+      if (cvo_params->is_using_intensity) {
+        float d2_color = squared_dist<float>(p_a->features, p_b->features, FEATURE_DIMENSIONS);
+        if (d2_color < d2_c_thres)
+          ck = c_sigma2*exp(-d2_color/(2.0*c2 ));
+        else
+          continue;
+      }
+      
+      if (cvo_params->is_using_semantics) {
+        float d2_semantic = squared_dist<float>(p_a->label_distribution, p_b->label_distribution, NUM_CLASSES);
+                
+        if (d2_semantic < d2_s_thres )
+          sk = cvo_params->s_sigma*cvo_params->s_sigma*exp(-d2_semantic/(2.0*s_ell*s_ell));
+        else
+          continue;
+      }
+      a = ck*k*sk*geo_sim;
+      
+      update_top_k(best_affinities, best_indices, count, 
+                   a, global_idx,
+                   cvo_params->sp_thres, num_neighbors);
+      //if (i==0)  {
+      //  printf("point_a is (%f,%f,%f), point_b with index %d is (%f,%f,%f), k=%f,ck=%f, sk=%f , a=%f\n", p_a->x, p_a->y, p_a->z, ind_b,  p_b->x, p_b->y, p_b->z,  k, ck, sk, a );
+      //  }
+      
+
+
+    }
+    
+
+    __syncthreads();  // Ensure tile processing completes
+   }
+
+    // Sort if required
+    if (cvo_params->multiframe_is_sorting_inner_product && 
+        count > cvo_params->multiframe_is_sorting_inner_product) {
+        sort_pairs(best_affinities, best_indices, count);
+    }
+
+    // ====================== GLOBAL MEMORY WRITE ======================
+    // Store number of nonzeros
+    A_mat->nonzeros[i] = count;
+    
+    // Store results
+    for (int k = 0; k < min(count, num_neighbors); k++) {
+        A_mat->mat[i * num_neighbors + k] = best_affinities[k];
+        A_mat->ind_row2col[i * num_neighbors + k] = best_indices[k];
+    }
+    
+
+      /*
+      if (i == 1) {
+
+        for (int k = 0; k < num_neighbors; k++) {
+          printf("A_mat[k]=%f, a_mat[k] ind = %d\n", *(A_mat->mat + num_neighbors * i + k),
+                 *(A_mat->ind_row2col + num_neighbors * i + k));
+        }
+        }*/
+      
+     
+
+
+  }
+
+#endif  
 
 
   static
@@ -1171,6 +1413,26 @@ namespace cvo{
     CvoPoint * points_fixed_raw = thrust::raw_pointer_cast (  points_fixed->points.data() );
     CvoPoint * points_moving_raw = thrust::raw_pointer_cast( points_moving->points.data() );
 
+#ifdef CUDA_SHARED_MEMORY
+    int block_size = CUDA_BLOCK_SIZE;  // Optimal for most GPUs
+    int grid_size = (fixed_size + block_size - 1) / block_size;
+
+    // No shared memory needed for points_b since we use per-thread registers
+    fill_in_A_mat_gpu_shared_memory<<<grid_size, block_size, TILE_SIZE * sizeof(CvoPoint)>>>(
+                                                                               params_gpu,
+                                                                                                points_fixed_raw,
+                                                                                                fixed_size,
+                                                                                                points_moving_raw,
+                                                                                                points_moving->points.size(),
+                                                                                                num_neighbors,
+                                                                                                ell,
+                                                                                                // output
+                                                                                                A_mat_gpu // the kernel mat
+                                                                                             
+                                                                                             );
+#else
+    
+
     fill_in_A_mat_gpu<<<(points_fixed->points.size() / CUDA_BLOCK_SIZE)+1, CUDA_BLOCK_SIZE  >>>(params_gpu,
                                                                                                 points_fixed_raw,
                                                                                                 fixed_size,
@@ -1181,6 +1443,7 @@ namespace cvo{
                                                                                                 // output
                                                                                                 A_mat_gpu // the kernel mat
                                                                                                 );
+#endif
     cudaDeviceSynchronize();    
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) { 

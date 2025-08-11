@@ -28,7 +28,7 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 # Release Mode
 #set(CMAKE_BUILD_TYPE Release)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -O3 -msse  -msse2 -msse3 -msse4 -mavx2 -ftree-vectorize" )
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -lmkl_intel_lp64 -lmkl_core -lmkl -liomp -msse  -msse2 -msse3 -msse4 -mavx2 -ftree-vectorize" )
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -O3 -olmkl_intel_lp64 -lmkl_core -lmkl -liomp -msse  -msse2 -msse3 -msse4 -mavx2 -ftree-vectorize" )
 #set(CMAKE_BUILD_TYPE Debug)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -g  -msse -msse2 -msse3 -msse4 -mavx2 -ftree-vectorize" )
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}   -march=native" )
@@ -555,7 +555,7 @@ target_include_directories(cvo_gpu_lidar PUBLIC
   "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"
   $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
 add_dependencies(cvo_gpu_lidar cvo_utils lie_group_utils)
-target_compile_definitions(cvo_gpu_lidar PUBLIC -DNUM_CLASSES=20 -DFEATURE_DIMENSIONS=1 -DCUDA_BLOCK_SIZE=128 -DCVO_POINT_NEIGHBORS=128)
+target_compile_definitions(cvo_gpu_lidar PUBLIC -DNUM_CLASSES=20 -DFEATURE_DIMENSIONS=1 -DCUDA_BLOCK_SIZE=128 -DCVO_POINT_NEIGHBORS=128 -DCUDA_SHARED_MEMORY -DTILE_SIZE=16) 
 target_link_libraries(cvo_gpu_lidar PRIVATE lie_group_utils cvo_utils yaml-cpp Ceres::ceres)
 set_target_properties(cvo_gpu_lidar PROPERTIES
   POSITION_INDEPENDENT_CODE ON
@@ -1012,6 +1012,11 @@ add_executable(depth_gen ${PROJECT_SOURCE_DIR}/src/experiments/main_depth_gen.cp
 target_compile_definitions(depth_gen PUBLIC -DNUM_CLASSES=20 -DFEATURE_DIMENSIONS=5)
 target_include_directories(depth_gen PUBLIC  "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>")
 target_link_libraries(depth_gen cvo_utils kitti boost_filesystem boost_system cnpy tartan finnforest cvo_gpu_img)
+
+add_executable(pcd_gen ${PROJECT_SOURCE_DIR}/src/experiments/main_dataset_to_pcd.cpp )
+target_include_directories(pcd_gen PUBLIC  "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>")
+target_link_libraries(pcd_gen cvo_gpu_img cvo_utils kitti boost_filesystem boost_system cnpy tartan finnforest cvo_gpu_img)
+
 
 add_executable(main_cvo_gpu_align_stereo_tartan ${PROJECT_SOURCE_DIR}/src/experiments/main_cvo_gpu_align_stereo_tartan.cpp)
 target_include_directories(main_cvo_gpu_align_stereo_tartan PUBLIC
