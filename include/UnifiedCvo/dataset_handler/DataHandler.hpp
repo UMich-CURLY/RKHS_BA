@@ -31,6 +31,8 @@ namespace cvo {
     
     virtual int read_next_lidar_mono(cv::Mat & image,
                                      pcl::PointCloud<pcl::PointXYZ>::Ptr pc  ) { return 0; }
+
+    virtual int read_next_pcd(typename pcl::PointCloud<pcl::PointXYZI>::Ptr pc) { return 0; }
     virtual ~DatasetHandler() = 0;
     
     virtual void set_start_index(int start) = 0;
