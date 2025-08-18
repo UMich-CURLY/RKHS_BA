@@ -9,8 +9,14 @@
 #include <Eigen/Dense>
 #include "cvo/CvoGPU.hpp"
 #include "utils/CvoPointCloud.hpp"
-#include "cvo/CvoFrame.hpp"
+#include "cvo/CvoFrameGPU.hpp"
 #include "dataset_handler/KittiHandler.hpp"
+#include "cvo/IRLS_State_CPU.hpp"
+#include "cvo/IRLS_State_GPU.hpp"
+#include "cvo/IRLS_State.hpp"
+#include "cvo/CvoFrameGPU.hpp"
+#include "cvo/IRLS.hpp"
+
 using namespace std;
 
 
@@ -126,7 +132,7 @@ int main(int argc, char** argv) {
     covisMapFile = argv[4];
 
   // read point cloud
-  std::vector<cvo::CvoFrame::Ptr> frames;
+  std::vector<cvo::CvoFrameGPU::Ptr> frames;
   std::vector<std::shared_ptr<cvo::CvoPointCloud>> pcs;
   std::unordered_map<int, int> id_to_index;
   for (int i = 0; i<frame_inds.size(); i++) {
@@ -137,30 +143,53 @@ int main(int argc, char** argv) {
     pcl::io::loadPCDFile<pcl::PointXYZRGB> (frame_fname, *cloud);
 
     std::shared_ptr<cvo::CvoPointCloud> pc (new cvo::CvoPointCloud(*cloud));
-    std::cout<<"Load "<<frame_fname<<", "<<pc->positions().size()<<" number of points\n";
+
     pcs.push_back(pc);
 
-    cvo::CvoFrame::Ptr new_frame(new cvo::CvoFrame(pc.get(), tracking_poses[i].data(), false));
+    cvo::CvoFrame::Ptr new_frame(new cvo::CvoFrameGPU(pc.get(), tracking_poses[i].data(), false));
     frames.push_back(new_frame);
     id_to_index[curr_frame_id] = i;
+
+    std::cout<<"Load "<<frame_fname<<", "<<pc->positions().size()<<" number of points, pose ptr is "<<new_frame->pose_vec<<"\n";    
   }
   std::string f_name("before_BA.pcd");
   write_transformed_pc(frames, f_name);
 
-  std::list<std::pair<cvo::CvoFrame::Ptr, cvo::CvoFrame::Ptr>> edges;
+
+  std::list<cvo::BinaryState::Ptr> edge_states;
+  
+  const cvo::CvoParams & params = cvo_align.get_params();  
   for (int i = 0; i < edge_inds.size(); i++) {
     int first_ind = id_to_index[edge_inds[i].first];
     int second_ind = id_to_index[edge_inds[i].second];
-    std::cout<<"first ind "<<first_ind<<", second ind "<<second_ind<<std::endl;
-    std::pair<cvo::CvoFrame::Ptr, cvo::CvoFrame::Ptr> p(frames[first_ind], frames[second_ind]);
-    edges.push_back(p);
+    //std::cout<<"first ind "<<first_ind<<", second ind "<<second_ind<<std::endl;
+    std::cout<<"first frame "<<frames[first_ind]<<", second frame "<<frames[second_ind]<<std::endl;
+    //std::pair<cvo::CvoFrame::Ptr, cvo::CvoFrame::Ptr> p(frames[first_ind], frames[second_ind]);
+    cvo::BinaryStateGPU::Ptr edge_state(new cvo::BinaryStateGPU(std::dynamic_pointer_cast<cvo::CvoFrameGPU>(frames[first_ind]),
+                                                                std::dynamic_pointer_cast<cvo::CvoFrameGPU>(frames[second_ind]),
+                                                                &params,
+                                                                cvo_align.get_params_gpu(),
+                                                                params.multiframe_num_neighbors,
+                                                                params.multiframe_ell_init
+                                                                ));
+    edge_states.push_back((edge_state));
+    
   }
 
   double time = 0;
   std::vector<bool> const_flags(frames.size(), false);
-  const_flags[0] = true;  
-  cvo_align.align(frames, const_flags,
-                  edges, &time);
+  const_flags[0] = true;
+
+  auto start = std::chrono::system_clock::now();
+  
+  cvo::CvoBatchIRLS batch_irls_problem(frames, const_flags,
+                                       edge_states, &cvo_align.get_params());
+  batch_irls_problem.solve();//gt_poses, err_file);
+  auto end = std::chrono::system_clock::now();
+  std::chrono::duration<double, std::milli> t_all = end - start;
+
+  //cvo_align.align(frames, const_flags,
+  //                edges, &time);
 
   std::cout<<"Align ends. Total time is "<<time<<std::endl;
   f_name="after_BA.pcd";

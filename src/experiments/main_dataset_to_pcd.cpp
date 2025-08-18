@@ -63,9 +63,9 @@ int main(int argc, char *argv[]) {
     } else if (dataset_type == RGBD) {
       cv::Mat left;
       std::vector<float> depth;
-      dataset->read_next_rgbd(left, depth);
+      dynamic_cast<cvo::TartanAirHandler &>(*dataset).read_next_rgbd(left, depth);
       cvo::ImageRGBD<float> image(left, depth, false);
-      cvo::CvoPointCloud cvo_pc(image, *calib);
+      cvo::CvoPointCloud cvo_pc(image, *calib, cvo::CvoPointCloud::PointSelectionMethod::DSO_EDGES);
       pcl::PointCloud<pcl::PointXYZRGB> pc;
       cvo_pc.export_to_pcd<pcl::PointXYZRGB>(pc);
       pcl::io::savePCDFileASCII(out_prefix+std::to_string(start_frame+i*every_n_frame)+".pcd", pc);

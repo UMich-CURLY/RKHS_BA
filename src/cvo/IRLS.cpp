@@ -205,10 +205,13 @@ namespace cvo {
       LocalParameterizationSE3 * se3_parameterization = new LocalParameterizationSE3();
       for (auto & frame : *frames_) {
 
-        std::cout<<"Frame number of points "<<frame->points->num_points()<<std::endl;
+
         //if (params_->is_using_kdtree == false)
         frame->transform_pointcloud();
         problem.AddParameterBlock(frame->pose_vec, 12, se3_parameterization);
+        std::cout<<"Frame number of points "<<frame->points->num_points()
+                 <<", add parameter block "<<frame->pose_vec
+                 <<std::endl;        
       }
 
       std::vector<int> invalid_factors(states_->size());
@@ -265,8 +268,10 @@ namespace cvo {
       last_nonzeros = total_nonzeros;
       for (int k = 0; k < frames_->size(); k++) {
         problem.SetParameterization(frames_->at(k)->pose_vec, se3_parameterization);
-        if (pivot_flags_.at(k))
-          problem.SetParameterBlockConstant(frames_->at(k)->pose_vec);          
+        if (pivot_flags_.at(k)) {
+          problem.SetParameterBlockConstant(frames_->at(k)->pose_vec); 
+	  std::cout<<"Set frame index (not id) "<<k<<" to be constant\n";
+	}	  
       }
 
 
