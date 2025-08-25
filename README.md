@@ -72,8 +72,14 @@ Before registration (`before_align.pcd`) |  After registration (`after_align.pcd
 ![stacking source.pcd and target.pcd before registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/before_align.png "Stacked Point Cloud before registration")  | ![stacking source.pcd and target.pcd after registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/after_align.png "Stacked Point Cloud before registration")
 
 #### Example of aligning four point clouds
-
+###### Launch multi-view registration
 `bash scripts/cvo_irls_tartan_demo.bash`
+###### Result: Stacking four point clouds before and after alignment
+Before registration (`before_ba.pcd`) | After registration (`after_ba.pcd`)
+--- | ---
+![stacking `50.pcd, 53.pcd, 56.pcd, 59.pcd` before registration](https://github.com/UMich-CURLY/RKHS_BA/blob/dev/demo_data/tartan_demo/before_ba_hospital.png "Stacked Four Point Cloud before registration")  | ![stacking source.pcd and target.pcd after registration](https://github.com/UMich-CURLY/RKHS_BA/blob/dev/demo_data/tartan_demo/after_ba_hospital.png "Stacked Four Point Cloud before registration")
+
+
 
 #### Frame-to-Frame Registration Demo on Kitti
 Make sure the folder of Kitti Stereo sequences contains the `cvo_calib.txt` and the parameter yaml file is specified. Now inside docker container:
@@ -326,3 +332,4 @@ Point Selector and Cvo PointCloud constructor: `include/unified_cvo/utils/CvoPoi
   year={2024}
 }
 ```
+
