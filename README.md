@@ -308,6 +308,21 @@ nearest_neighbors_max: 512
 multiframe_using_cpu: 0
 is_using_geometric_type: 0
 
+# for irls solver
+multiframe_using_cpu: 0
+multiframe_num_neighbors: 256   
+multiframe_max_iters: 1000 
+multiframe_ell_init: 1 #0.1           # use large ell such as 1 for identity init guess. Use small ell such as 0.1 if there is a good init guess
+multiframe_ell_min: 0.05 
+multiframe_ell_decay_rate:  0.95
+multiframe_iterations_per_ell: 100    # can be tuned based on converging speed
+multiframe_downsample_voxel_size: 0.5 # can be tuned according to input density
+multiframe_iterations_per_solve: 1 
+multiframe_is_optimizing_ell: 0
+multiframe_is_sorting_inner_product: 32 # use top 32 neighbors for each point
+multiframe_is_free_memory_each_iter: 0
+
+
 ```
 
 
@@ -332,4 +347,5 @@ Point Selector and Cvo PointCloud constructor: `include/unified_cvo/utils/CvoPoi
   year={2024}
 }
 ```
+
 
