@@ -1,10 +1,12 @@
-cd build
+cd build_debug
 make -j12
 cd ..
 
 
-dataset_name=$1 #tartanair
-dataset_path=$2
-dtype=2
+dataset_name=tartanair
+#dataset_path=/home/rayzhang/media/tartanair/abandonedfactory/Easy/P001/
+dataset_path=/home/rayzhang/media/tartanair/hospital/Easy/P001/
+dtype=2  # 0: LIDAR, 1: STEREO,  2: RGBD
 
-./build/bin/pcd_gen $dataset_name $dataset_path $dtype "" 0 3 4 $dataset_path/cvo_calib_deep_depth.txt 
+gdb -ex run --args \
+./build_debug/bin/pcd_gen $dataset_name $dataset_path $dtype "" 50 3 4 $dataset_path/cvo_calib_deep_depth.txt 
