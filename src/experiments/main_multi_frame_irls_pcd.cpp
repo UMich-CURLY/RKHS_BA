@@ -22,7 +22,10 @@ using namespace std;
 
 void read_graph_file(std::string &graph_file_path,
                      std::vector<int> & frame_inds,
-                     std::vector<std::pair<int, int>> & edges) {
+                     std::vector<std::pair<int, int>> & edges,
+                     std::vector<cvo::Mat34d_row,
+                      Eigen::aligned_allocator<cvo::Mat34d_row>> & poses_all) {
+                     
   std::ifstream graph_file(graph_file_path);
   
   int num_frames, num_edges;
@@ -42,6 +45,22 @@ void read_graph_file(std::string &graph_file_path,
     std::cout<<"("<<p.first<<", "<<p.second <<"), ";
   }
   std::cout<<"\n";
+  if (graph_file.eof() == false){
+    std::cout<<"poses included in the graph file\n";
+    poses_all.resize(num_frames);
+    for (int i = 0; i < num_frames; i++) {
+      double pose_vec[12];
+      for (int j = 0; j < 12; j++) {
+        graph_file>>pose_vec[j];
+      }
+      poses_all[i]  << pose_vec[0] , pose_vec[1], pose_vec[2], pose_vec[3],
+        pose_vec[4], pose_vec[5], pose_vec[6], pose_vec[7],
+        pose_vec[8], pose_vec[9], pose_vec[10], pose_vec[11];
+      std::cout<<"read pose["<<i<<"] as \n"<<poses_all[i]<<"\n";
+    }
+  }
+  
+  
   graph_file.close();  
 }
 
@@ -118,18 +137,19 @@ int main(int argc, char** argv) {
   std::string graph_file_name(argv[2]);
   std::vector<int> frame_inds;
   std::vector<std::pair<int, int>> edge_inds;
-  read_graph_file(graph_file_name, frame_inds, edge_inds);
-
   std::vector<cvo::Mat34d_row, Eigen::aligned_allocator<cvo::Mat34d_row>> gt_poses;
   std::vector<cvo::Mat34d_row, Eigen::aligned_allocator<cvo::Mat34d_row>> tracking_poses;
-  std::string tracking_fname(argv[3]);
+  
+  read_graph_file(graph_file_name, frame_inds, edge_inds, tracking_poses);
+
+  //std::string tracking_fname(argv[3]);
   //std::string gt_fname(argv[4]);
-  read_pose_file(tracking_fname, frame_inds, tracking_poses);
+  //read_pose_file(tracking_fname, frame_inds, tracking_poses);
   //read_pose_file(gt_fname, frame_inds, gt_poses);
 
   std::string covisMapFile;
-  if (argc > 4)
-    covisMapFile = argv[4];
+  if (argc > 3)
+    covisMapFile = argv[3];
 
   // read point cloud
   std::vector<cvo::CvoFrameGPU::Ptr> frames;
