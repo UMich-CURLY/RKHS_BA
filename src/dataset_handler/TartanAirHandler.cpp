@@ -9,14 +9,80 @@
 #include <cstdlib>
 #include <algorithm>
 #include <cassert>
-#include <boost/filesystem.hpp>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <limits>
 #include "dataset_handler/TartanAirHandler.hpp"
-#include "cnpy.h"
 
 using namespace std;
-using namespace boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace cvo {
+  namespace {
+
+  template <typename T>
+  std::vector<T> load_npy_flat(const std::string& path, std::vector<size_t>& shape) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in.good()) {
+      throw std::runtime_error("Failed to open npy file: " + path);
+    }
+
+    char magic[6];
+    in.read(magic, 6);
+    if (std::strncmp(magic, "\x93NUMPY", 6) != 0) {
+      throw std::runtime_error("Invalid npy magic: " + path);
+    }
+
+    char version[2];
+    in.read(version, 2);
+    uint32_t header_len = 0;
+    if (version[0] == 1) {
+      uint16_t h16 = 0;
+      in.read(reinterpret_cast<char*>(&h16), sizeof(h16));
+      header_len = h16;
+    } else {
+      in.read(reinterpret_cast<char*>(&header_len), sizeof(header_len));
+    }
+
+    std::string header(header_len, '\0');
+    in.read(header.data(), header_len);
+
+    const auto shape_pos = header.find("shape");
+    const auto open = header.find('(', shape_pos);
+    const auto close = header.find(')', open);
+    if (shape_pos == std::string::npos || open == std::string::npos || close == std::string::npos) {
+      throw std::runtime_error("Failed to parse npy shape: " + path);
+    }
+
+    std::stringstream ss(header.substr(open + 1, close - open - 1));
+    shape.clear();
+    while (ss.good()) {
+      std::string token;
+      std::getline(ss, token, ',');
+      token.erase(std::remove_if(token.begin(), token.end(), ::isspace), token.end());
+      if (!token.empty()) {
+        shape.push_back(static_cast<size_t>(std::stoul(token)));
+      }
+    }
+    if (shape.empty()) {
+      throw std::runtime_error("Empty npy shape: " + path);
+    }
+
+    size_t total = 1;
+    for (size_t dim : shape) {
+      total *= dim;
+    }
+    std::vector<T> data(total);
+    in.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(total * sizeof(T)));
+    if (!in.good()) {
+      throw std::runtime_error("Failed to read npy payload: " + path);
+    }
+    return data;
+  }
+
+  } // namespace
+
   TartanAirHandler::TartanAirHandler(std::string tartan_traj_folder,
                                      std::string depth_folder_dir){
     this->folder_name = tartan_traj_folder;
@@ -30,12 +96,12 @@ namespace cvo {
     const string image_pth = tartan_traj_folder + "/image_left";
     // count number of files in both dirs
     int depth_count = 0;
-    directory_iterator end_it;
-    for (directory_iterator it(depth_pth); it != end_it; it++) {
+    fs::directory_iterator end_it;
+    for (fs::directory_iterator it(depth_pth); it != end_it; it++) {
       depth_count++;
     }
     int image_count = 0;
-    for (directory_iterator it(image_pth); it != end_it; it++) {
+    for (fs::directory_iterator it(image_pth); it != end_it; it++) {
       image_count++;
     }
     //assert (depth_count == image_count);
@@ -108,44 +174,45 @@ namespace cvo {
                                        float max_depth,
                                        bool is_disparity) {
     if (curr_index >= total_size) {
-      std::cout<<"Error: index is larger than maximum";
       return -1;
     }
-    // format curr_index
     stringstream ss;
     ss << setw(6) << setfill('0') << curr_index;
     string index_str = ss.str();
-    // read rgb image
+
     string img_pth = folder_name + "/image_left/" + index_str + "_left.png";
     rgb_img = cv::imread(img_pth, cv::ImreadModes::IMREAD_COLOR);
-    // read depth npy
-    const string depth_folder = this->folder_name + "/" + depth_folder_name;
-    string dep_pth = depth_folder + "/" + index_str + "_left_depth.npy";
-    cnpy::NpyArray dep_arr = cnpy::npy_load(dep_pth);
-    float* dep_data = dep_arr.data<float>();
-    int dim1 = dep_arr.shape[0];
-    int dim2 = dep_arr.shape[1];
-    std::cout<<"dim1="<<dim1<<", dim2="<<dim2<<"\n";
-    cv::Mat raw_dep(cv::Size(dim2, dim1), CV_32FC1, dep_data);
-    // set high depth pixels (sky) to nanb
-    dep_vec.resize(dim1 * dim2);
-    for (int r = 0; r < raw_dep.rows; r++) {
-      for (int c = 0; c < raw_dep.cols; c++) {
-        float pix = raw_dep.at<float>(r, c);
-        if (pix > 60000 )
+    const string depth_folder = folder_name + "/" + depth_folder_name;
+    const string npy_path = depth_folder + "/" + index_str + "_left_depth.npy";
+    if (rgb_img.data == nullptr) {
+      cerr<<"Image doesn't read successfully: "<<img_pth<<"\n";
+      return -1;
+    }
+
+    std::vector<size_t> shape;
+    const auto depth_data = load_npy_flat<float>(npy_path, shape);
+    if (shape.size() != 2) {
+      throw std::runtime_error("Expected 2D tartan depth npy: " + npy_path);
+    }
+    const int rows = static_cast<int>(shape[0]);
+    const int cols = static_cast<int>(shape[1]);
+    dep_vec.resize(depth_data.size());
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < cols; c++) {
+        float pix = depth_data[r * cols + c];
+        if (!std::isfinite(pix) || pix <= 0.0f || pix > 60000.0f) {
           pix = std::nanf("1");
-        if (is_disparity)
-          pix = 80 / pix;
-        if (pix > max_depth)
-          pix = std::nanf("1");
-          //  raw_dep.at<float>(r, c) = std::nanf("1");
-        dep_vec[ r * raw_dep.cols + c] =  pix;
+        } else {
+          if (is_disparity) {
+            pix = 80.0f / pix;
+          }
+          if (pix > max_depth) {
+            pix = std::nanf("1");
+          }
+        }
+        dep_vec[r * cols + c] = pix;
       }
     }
-    // scale by 5000 and flatten to vector
-    //raw_dep = raw_dep; //* 5000.0f;
-    //dep_vec.clear();
-    //dep_vec = vector<float>(raw_dep.begin<float>(), raw_dep.end<float>());
     return 0;
   }
 
@@ -225,46 +292,10 @@ namespace cvo {
   }
 
   int TartanAirHandler::read_next_semantics(int num_pixels, int num_semantic_class, std::vector<float> & semantics) {
-    if (semantic_class.empty()) {
-      cout << "No useable semantic class mapping\n";
-      return -1;
-    }
-    // format curr_index
-    stringstream ss;
-    ss << setw(6) << setfill('0') << curr_index;
-    string index_str = ss.str();
-    string semantic_name = folder_name + "/seg_left/" + index_str + "_left_seg.npy";
-    cnpy::NpyArray sem_arr = cnpy::npy_load(semantic_name);
-    // if (sem_arr.data == nullptr)
-    //   return -1;
-    uint8_t* sem_data = sem_arr.data<uint8_t>();
-    // visualize to debug
-    // int rows = sem_arr.shape[0];
-    // int cols = sem_arr.shape[1];
-    // cv::Mat raw_sem(cv::Size(cols, rows), CV_8UC1);
-    // for (int r = 0; r < rows; r++ ) {
-    //   for (int c = 0; c < cols; c++){
-    //     uint8_t* orig_label = sem_data + (r * cols + c);
-    //     // scale by 20 to increase contrast
-    //     uint8_t new_label = semantic_class[*orig_label] * 20;
-    //     raw_sem.at<uint8_t>(r, c) = new_label;
-    //   }
-    // }
-    // cv::imshow("img", left);
-    // cv::imshow("semantic", raw_sem);
-    // cv::waitKey(10);
-    // restructure to hold probability for each semantic class
-    semantics.resize(num_pixels * num_semantic_class);
-    fill(semantics.begin(), semantics.end(), 0);
-    for (int i = 0; i < num_pixels; i++) {
-      // find the begin index for current pixel semantic classes
-      int begin_idx = i * num_semantic_class;
-      // find the class attribute for the pixel, 0 ~ num_semantics_class
-      uint8_t* orig_label = sem_data + i;
-      uint8_t remapped_label = semantic_class[*orig_label];
-      semantics[begin_idx + remapped_label] = 1.0; // mark groundtruth with prob 1.0
-    }
-    return 0;
+    (void)num_pixels;
+    (void)num_semantic_class;
+    semantics.clear();
+    return -1;
   }
 
 
@@ -279,59 +310,11 @@ namespace cvo {
     if (read_next_rgbd(rgb_img, dep_vec, max_depth, is_disparity))
       return -1;
     
-    if (semantic_class.empty()) {
-      cout << "No useable semantic class mapping\n";
-      return -1;
-    }
-    // format curr_index
-    stringstream ss;
-    ss << setw(6) << setfill('0') << curr_index;
-    string index_str = ss.str();
-    string semantic_name = folder_name + "/seg_left/" + index_str + "_left_seg.npy";
-    cnpy::NpyArray sem_arr = cnpy::npy_load(semantic_name);
-    // if (sem_arr.data == nullptr)
-    //   return -1;
-    uint8_t* sem_data = sem_arr.data<uint8_t>();
-    // visualize to debug
-    // int rows = sem_arr.shape[0];
-    // int cols = sem_arr.shape[1];
-    // cv::Mat raw_sem(cv::Size(cols, rows), CV_8UC1);
-    // for (int r = 0; r < rows; r++ ) {
-    //   for (int c = 0; c < cols; c++){
-    //     uint8_t* orig_label = sem_data + (r * cols + c);
-    //     // scale by 20 to increase contrast
-    //     uint8_t new_label = semantic_class[*orig_label] * 20;
-    //     raw_sem.at<uint8_t>(r, c) = new_label;
-    //   }
-    // }
-    // cv::imshow("img", left);
-    // cv::imshow("semantic", raw_sem);
-    // cv::waitKey(10);
-    // restructure to hold probability for each semantic class
-    int num_pixels = dep_vec.size();
-    semantics.resize(num_pixels * num_semantic_class);
-    fill(semantics.begin(), semantics.end(), 0);
-
-    //std::mt19937 generator;
-    //std::normal_distribution<float> dist_semantic(0.0, rand_semantic_noise_sigma);
-    //std::normal_distribution<float> dist_misalign(0.0, depth_misalignment_sigma);
-    
-    // Add Gaussian noise
-    
-    for (int i = 0; i < num_pixels; i++) {
-      // find the begin index for current pixel semantic classes
-      int begin_idx = i * num_semantic_class;
-      // find the class attribute for the pixel, 0 ~ num_semantics_class
-
-      uint8_t label = *(sem_data + i);
-      if (label == sky_label || dep_vec[i] > max_depth)
-        dep_vec[i] = std::nanf("1");
-
-      uint8_t remapped_label = semantic_class[label];
-      semantics[begin_idx + remapped_label] = 1.0; // mark groundtruth with prob 1.p0
-    }
-    
-    return 0;
+    (void)num_semantic_class;
+    (void)sky_label;
+    (void)max_depth;
+    semantics.clear();
+    return -1;
     
   }
   

@@ -4,16 +4,15 @@
 #include <algorithm>
 #include <cassert>
 #include <sstream>
-#include <boost/filesystem.hpp>
+#include <filesystem>
 #include <opencv2/imgcodecs.hpp>
 #include "dataset_handler/KittiHandler.hpp"
-#include "utils/debug_visualization.hpp"
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <map>
 using namespace std;
-using namespace boost::filesystem;
+namespace fs = std::filesystem;
 
 namespace cvo
 {
@@ -32,10 +31,10 @@ namespace cvo
     {
       data_folder = folder_name + "/velodyne/";
       if (calib_type == LidarCamCalibType::CAM2 &&
-          boost::filesystem::exists( folder_name + "/calib_velo_to_cam.txt" )) {
+          fs::exists(folder_name + "/calib_velo_to_cam.txt")) {
         this->read_lidar_calib(folder_name + "/calib_velo_to_cam.txt", calib_type);
       } else if (calib_type == LidarCamCalibType::CAM0 &&
-                 boost::filesystem::exists( folder_name + "/calib.txt" )) {
+                 fs::exists(folder_name + "/calib.txt")) {
         this->read_lidar_calib(folder_name + "/calib.txt", calib_type);
       } else {
         /// stay in the lidar frame
@@ -53,10 +52,10 @@ namespace cvo
       }
     }
 
-    path kitti(data_folder.c_str());
-    for (auto &p : directory_iterator(kitti))
+    fs::path kitti(data_folder.c_str());
+    for (auto &p : fs::directory_iterator(kitti))
     {
-      if (is_regular_file(p.path()))
+      if (fs::is_regular_file(p.path()))
       {
         string curr_file = p.path().filename().string();
         size_t last_ind = curr_file.find_last_of(".");
@@ -113,9 +112,6 @@ namespace cvo
            << std::flush;
       return -1;
     }
-
-    if (debug_plot)
-      visualize_semantic_image("last_semantic.png", semantics.data(), num_semantic_class, left.cols, left.rows);
 
     return 0;
   }

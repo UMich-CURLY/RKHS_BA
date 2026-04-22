@@ -10,4 +10,6 @@ for i in range(len(sys.argv)):
     print(pcd)
     print(np.asarray(pcd.points))
     pcds.append(pcd)
+
+#o3d.visualization.draw(geometry=pcds, point_size=1)
 o3d.visualization.draw_geometries(pcds)

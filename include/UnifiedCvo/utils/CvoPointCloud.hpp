@@ -1,236 +1,139 @@
 #pragma once
-#include <string>
-#include <memory>
+
 #include <vector>
 #include <Eigen/Dense>
-#include <unordered_set>
-#include <opencv2/opencv.hpp>
-#include "utils/data_type.hpp"
-#include "utils/PointSegmentedDistribution.hpp"
-#include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
-#include <utils/CvoPoint.hpp>
 
-
-namespace semantic_bki {
-  class SemanticBKIOctoMap;
-}
-
-namespace pcl {
-  struct CvoPoint;
-}
-
-extern template struct pcl::PointSegmentedDistribution<FEATURE_DIMENSIONS, NUM_CLASSES>;
+#include "utils/PointConverter.hpp"
+#include "utils/PointSemantic.hpp"
 
 namespace cvo {
-  
-  template <typename DepthType> class ImageRGBD;
-  class ImageStereo;
-  class RawImage;
-  class Calibration;
 
-  class
-  //#ifdef __CUDACC__
-  // __align__(16)
-  //#else
-  //  alignas(16)
-  // #endif    
- CvoPointCloud{
+  template <typename PointT = pcl::PointSemantic<3, 19>>
+  class CvoPointCloud {
   public:
-    //EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+    using PointType = PointT;
+    using Container = std::vector<PointT>;
 
-    enum PointSelectionMethod {
-      CV_FAST,
-      RANDOM,
-      DSO_EDGES,
-      DSO_EDGES_WITH_RANDOM,
-      LIDAR_EDGES,
-      CANNY_EDGES,
-      EDGES_ONLY,
-      LOAM,
-      FULL
-    };
-
-    enum GeometryType {
-      EDGE,
-      SURFACE
-    };
-
-    const int pixel_pattern[8][2] = {{0,0}, {-1, 0},{-1,-1}, {-1,1}, {0,1},{0,-1},{1,1},{1,0} };
-
-    /// Constructor for stereo image
-    CvoPointCloud(const ImageStereo & left_raw_image,
-                  const Calibration &calib,
-                  PointSelectionMethod pt_selection_method=CV_FAST,
-                  const std::unordered_set<int> * exclude_labels=nullptr,
-                  float max_depth=50.0);
-    
-
-    /// Constructor for rgbd image
-    template <typename DepthType>
-    CvoPointCloud(const ImageRGBD<DepthType> & rgb_raw_image,
-                  const Calibration &calib,
-                  PointSelectionMethod pt_selection_method=CV_FAST,
-                  DepthType max_depth=50.0);
-
-    /// Constructor for lidar input
-    CvoPointCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr pc,
-                  int target_num_points,
-                  int beam_num,
-                  PointSelectionMethod pt_selection_method=LOAM);
-
-    
-    /// construtor for lidar points with semantics
-    CvoPointCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr pc, 
-                  const std::vector<int> & semantics,
-                  int num_classes,
-                  int target_num_points,
-                  int beam_num,
-                  PointSelectionMethod pt_selection_method=LOAM);
-
-    CvoPointCloud(int feature_dimensions, int num_classes);
-
-    //CvoPointCloud(const std::string & filename);
-
-    CvoPointCloud();
-    ~CvoPointCloud();    
-
-
-    // overloaded operators and copy constructors
-    CvoPointCloud(const CvoPointCloud & to_copy);
-    CvoPointCloud & operator+=(const CvoPointCloud & b);
-    friend CvoPointCloud operator+(CvoPointCloud a, const CvoPointCloud & b);
-    CvoPointCloud & operator=(const CvoPointCloud& input);
-
-    
-    template <typename PointT>
-      CvoPointCloud(const pcl::PointCloud<PointT> & pc);    
-    template <typename PointT>
-      CvoPointCloud(const pcl::PointCloud<PointT> & pc, GeometryType g_type);    
-
-    /*
-    CvoPointCloud(pcl::PointCloud<pcl::PointXYZIR>::Ptr pc,
-                  int target_num_points = 5000
-                  );
-
-
-
-    CvoPointCloud(pcl::PointCloud<pcl::PointXYZIR>::Ptr pc, 
-                  const std::vector<int> & semantics,
-                  int num_classes=19,
-                  int target_num_points = 5000
-                  );
-    */
-    // Constructor from continuous maps
-    CvoPointCloud(const semantic_bki::SemanticBKIOctoMap * map,
-		  const  int num_features,
-                  const int num_semantic_class);
-
-
-    int read_cvo_pointcloud_from_file(const std::string & filename);
-
-    static void transform(const Eigen::Matrix4f& pose,
-                          const CvoPointCloud & input,
-                          CvoPointCloud & output);
-
-    // setter
-    void erase(size_t index);
-
-    // getters
-    std::vector<cvo::CvoPoint> get_points() const {return points_;}
-    const cvo::CvoPoint & point_at(unsigned int index) const {return points_.at(index);}
-    cvo::CvoPoint & point_at(unsigned int index) {return points_.at(index);}
-
-    void filter_points(const std::vector<bool> & inliers);
-    
-    int num_points() const {return num_points_;}
-    int size() const {return num_points_;}
-    int num_classes() const {return num_classes_;}
-    int num_features() const {return feature_dimensions_;}
-    int feature_dimensions() const {return feature_dimensions_;}
-    int num_geometric_types() const {return num_geometric_types_; }
-    const std::vector<Eigen::Vector3f> positions() const {
-      std::vector<Eigen::Vector3f> positions;
-      for(int j = 0; j < num_points_; j++){
-        positions.push_back(Eigen::Vector3f(points_[j].x, points_[j].y, points_[j].z));
-      }
-      return positions;
+    // -----------------------------------------------------------------------
+    // Constructors / Destructor
+    // -----------------------------------------------------------------------
+    CvoPointCloud() = default;
+    explicit CvoPointCloud(size_t reserve_size) {
+      points_.reserve(reserve_size);
     }
-    cvo::CvoPoint & operator[](int index) { return points_[index]; }
-    Eigen::Vector3f at(unsigned int index) const;
-    Eigen::Vector3f xyz_at(unsigned int index) const;
-    const Eigen::VectorXf label_at(unsigned int index) const { return Eigen::Map<const Eigen::VectorXf>(points_[index].label_distribution, NUM_CLASSES); }
-    const Eigen::VectorXf feature_at(unsigned int index) const { return Eigen::Map<const Eigen::VectorXf>(points_[index].features, FEATURE_DIMENSIONS); }
-    Eigen::Vector2f geometry_type_at(unsigned int index) const;
-    
-    //const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> & normals() const {return normals_;}
-    //const Eigen::Matrix<float, Eigen::Dynamic, 9> & covariance() const {return covariance_;}
-    //const pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals() const {return cloud_with_normals_;}
-    //const Eigen::Matrix<float, Eigen::Dynamic, 2> & types() const {return types_;}
-    //const std::vector<float> & covariance()  const {return covariance_;}
-    //const std::vector<float> & eigenvalues() const {return eigenvalues_;}
+    template <typename OtherPointT>
+    explicit CvoPointCloud(const pcl::PointCloud<OtherPointT>& cloud) {
+      points_.reserve(cloud.size());
+      for (const auto& point : cloud) {
+        PointT converted;
+        point_converter::convert_point(point, converted);
+        points_.push_back(converted);
+      }
+    }
+    ~CvoPointCloud() = default;
 
-    // IO helpers
-    template<typename PointT> void export_to_pcd(pcl::PointCloud<PointT> & output) const;
-    void export_semantics_to_color_pcd(pcl::PointCloud<pcl::PointXYZRGB> & pc)  const;
-    void write_to_color_pcd(const std::string & name) const;
-    void write_to_label_pcd(const std::string & name) const;
-    void write_to_pcd(const std::string & name) const;
-    void write_to_txt(const std::string & name) const;
-    void write_to_intensity_pcd(const std::string & name) const;
-    
-    void reserve(int num_points, int feature_dims, int num_classes);
-    int add_point(int index, const Eigen::Vector3f & xyz, const Eigen::VectorXf & feature, const Eigen::VectorXf & label, const Eigen::VectorXf & geometric_type);
-    void push_back(const cvo::CvoPoint & new_point);
-    void add_semantics(int num_class) { this->num_classes_ = num_class; }
-    void clear() { points_.clear(); num_points_ = 0; }
-   
+    // Copy / move constructors and assignment
+    CvoPointCloud(const CvoPointCloud&) = default;
+    CvoPointCloud(CvoPointCloud&&) noexcept = default;
+    CvoPointCloud& operator=(const CvoPointCloud&) = default;
+    CvoPointCloud& operator=(CvoPointCloud&&) noexcept = default;
+
+    // -----------------------------------------------------------------------
+    // Container-like operations
+    // -----------------------------------------------------------------------
+    void push_back(const PointT& pt) {
+      points_.push_back(pt);
+    }
+    void push_back(PointT&& pt) {
+      points_.push_back(std::move(pt));
+    }
+    void pop_back() {
+      points_.pop_back();
+    }
+    void resize(size_t count) {
+      points_.resize(count);
+    }
+    void resize(size_t count, const PointT& value) {
+      points_.resize(count, value);
+    }
+    void clear() {
+      points_.clear();
+    }
+    void reserve(size_t capacity) {
+      points_.reserve(capacity);
+    }
+
+    size_t size() const noexcept {
+      return points_.size();
+    }
+    bool empty() const noexcept {
+      return points_.empty();
+    }
+
+    // Element access
+    PointT& at(size_t index) {
+      return points_.at(index);
+    }
+    const PointT& at(size_t index) const {
+      return points_.at(index);
+    }
+    PointT& operator[](size_t index) {
+      return points_[index];
+    }
+    const PointT& operator[](size_t index) const {
+      return points_[index];
+    }
+
+    // Direct access to underlying vector
+    Container& points() { return points_; }
+    const Container& points() const { return points_; }
+
+    // -----------------------------------------------------------------------
+    // Convenience methods for typical point attributes (if available)
+    // These rely on the point type having the corresponding members.
+    // They can be enabled via SFINAE or concepts (omitted for brevity).
+    // -----------------------------------------------------------------------
+    float x_at(size_t i) const { return points_[i].x; }
+    float y_at(size_t i) const { return points_[i].y; }
+    float z_at(size_t i) const { return points_[i].z; }
+    Eigen::Vector3f position_at(size_t i) const {
+      return Eigen::Vector3f(points_[i].x, points_[i].y, points_[i].z);
+    }
+
+    // -----------------------------------------------------------------------
+    // Static transformation helper (works for any PointT that has x,y,z)
+    // -----------------------------------------------------------------------
+    static void transform(const Eigen::Matrix4f& pose,
+                          const CvoPointCloud<PointT>& input,
+                          CvoPointCloud<PointT>& output) {
+      output.resize(input.size());
+      for (size_t i = 0; i < input.size(); ++i) {
+        const PointT& src = input[i];
+        PointT& dst = output[i];
+        Eigen::Vector4f p(src.x, src.y, src.z, 1.0f);
+        Eigen::Vector4f tp = pose * p;
+        dst = src;  // copy all other fields
+        dst.x = tp.x();
+        dst.y = tp.y();
+        dst.z = tp.z();
+      }
+    }
+
   private:
-    int num_points_;
-    int num_classes_;
-    int feature_dimensions_;
-    int num_geometric_types_;
-
-    std::vector<cvo::CvoPoint> points_;
-    //std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f>> positions_;  // points position. x,y,z
-//    std::vector<Eigen::Vector3f> positions_;
-    //Eigen::Matrix<float, Eigen::Dynamic, 3> positions_;
-//    Eigen::MatrixXf features_;
-    //Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> features_;   // rgb, gradient in [0,1]
-    //std::vector<Eigen::Matrix<float, 1, Eigen::Dynamic>> features_;   // rgb, gradient in [0,1]
-    //Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> normals_;  // surface normals
-//    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> labels_; // number of points by number of classes
-    //std::vector<Eigen::Matrix<float, 1, Eigen::Dynamic>> labels_;   // rgb, gradient in [0,1]    
-//    std::vector<float> geometric_types_;
-    
-    pcl::PointCloud<pcl::PointNormal>::Ptr cloud_with_normals_;
-    //Eigen::Matrix<float, Eigen::Dynamic, 2> types_; // type of the point using loam point selector, edge=(1,0), surface=(0,1)
-    
-    cv::Vec3f avg_pixel_color_pattern(const cv::Mat & raw, int u, int v, int w);
-    bool check_type_consistency() const;    
-
-
-    
-    //std::vector<float> covariance_;
-    //std::vector<float> eigenvalues_;
-    //thrust::device_vector<float> eigenvalues_;
-    //perl_registration::cuPointCloud<CvoPoint>::SharedPtr pc_gpu;
-    //void compute_covarianes(pcl::PointCloud<pcl::PointXYZI> & pc_raw);
-    //void compute_covariance(const pcl::PointCloud<pcl::PointXYZI> & pc_input,
-    //                        // outputs
-    //                        std::vector<float>& covariance_all,
-    //                        std::vector<float>& eigenvalues_all) const;
-
-
+    Container points_;
   };
-  // for historical reasons
-  typedef CvoPointCloud point_cloud;
 
+  // -----------------------------------------------------------------------
+  // Non‑member functions (for convenience)
+  // -----------------------------------------------------------------------
+  template <typename PointT>
+  CvoPointCloud<PointT> operator+(CvoPointCloud<PointT> a, const CvoPointCloud<PointT>& b) {
+    a.points().insert(a.points().end(), b.points().begin(), b.points().end());
+    return a;
+  }
 
+  // For backward compatibility, keep the old name as an alias.
+  using point_cloud = CvoPointCloud<>;
 
-  void write_all_to_label_pcd(const std::string name,
-                          const pcl::PointCloud<pcl::PointXYZI> & pc,
-                          int num_class,
-                          const std::vector<int> & semantic);
-
-}
+} // namespace cvo

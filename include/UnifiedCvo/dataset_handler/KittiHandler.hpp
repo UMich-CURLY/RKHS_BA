@@ -38,6 +38,7 @@ namespace cvo{
     void set_start_index(int start);
     int get_current_index();
     int get_total_number();
+    const std::string& get_data_folder() const { return folder_name; }
     void set_lidar_calib(const Eigen::Matrix<float, 3, 4> & lidar_to_cam);
     void read_lidar_calib(const std::string & calib_file, LidarCamCalibType calib_type=CAM0);
   private:

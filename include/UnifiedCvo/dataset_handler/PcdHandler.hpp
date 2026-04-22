@@ -3,6 +3,7 @@
 #include <string>
 #include <filesystem>
 #include <algorithm>
+#include <pcl/io/pcd_io.h>
 
 namespace cvo {
   class PcdHandler : public DatasetHandler{
@@ -16,8 +17,7 @@ namespace cvo {
           std::string current_file = p.path().string();
           const std::string pcd = ".pcd";
           if (current_file.size() >= pcd.size() && current_file.compare(current_file.size()-pcd.size(), pcd.size(), pcd) == 0) {
-
-            files.push_back(folder + "/" + current_file );
+            files.push_back(current_file);
           }
           // cout <<"reading "<< current_file << endl; 
         }

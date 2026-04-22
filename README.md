@@ -1,328 +1,574 @@
-# RKHS-BA
+# RKHS CVO / RKHS-BA Refactor
 
-This repository is an implementation for RKHS-BA.  It can perform global two-view and multi-view pure geometric point cloud registration, color-based registration, and semantic-based registration. It is tested in TartanAir and Kitti dataset. Details are in the [RKHS-BA: A Robust Correspondence-Free Multi-View Registration Framework with Semantic Point Clouds](https://arxiv.org/abs/2403.01254). It is built on our prior work, [CVO](https://github.com/UMich-CURLY/unified_cvo), which performs two-view registration.
+This repository is a refactored C++/CUDA implementation of:
 
-Specifically, this repository provides:
-* GPU implentation of goemetric, color, and semantic based registration, as well as global rotation registration
-* `cos` function angle computation that measures the overlap of two point clouds given their relative pose
-* GPU implementation of Multi-View Point Cloud Registration
+- two-frame CVO point cloud registration
+- multi-frame RKHS-BA style IRLS registration
 
-Stacked point clouds based on the resulting frame-to-frame trajectory:
-![The stacked pointcloud based on CVO's trajectory](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/results/stacked_pointcloud.png "Stacked Point Cloud after registration")
+Compared with the older `RKHS_BA` tree, this repo pushes most solver logic into templated headers under `include/UnifiedCvo/`, and keeps only small explicit CUDA instantiation libraries for the concrete point types used in the shipped runners and tests.
 
-[Video](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing) on test results of KITTI Stereo and TUM RGB-D:
-[![Test results of KITTI and TUM](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/results/TUM_featureless.png)](https://drive.google.com/file/d/1GA-2eS9ZE28c4t0BafaiTUJT93WHbFvt/view?usp=sharing)
+The current codebase supports:
 
-Largescale Lidar BA results on a biped robot
-![The Lidar point cloud map after large scale BA](https://github.com/UMich-CURLY/RKHS-BA/raw/dev/results/ba.png "Stacked Lidar point cloud maps after large-scale BA")
----
+- geometric kernels
+- feature kernels
+- semantic-distribution kernels
+- pairwise first-order on-manifold CVO alignment on `SE(3)`
+- multi-frame IRLS alignment
+- CUDA mutual-kNN sparse correlation filling
+- dataset-handler-backed KITTI and Tartan runners
 
-### Dependencies
-We recommend using this [Dockerfile](https://github.com/UMich-CURLY/docker_images/tree/cvo_dev/cvo_gpu) to get a prebuilt environment with all the following dependencies. 
+Reference papers are in [paper](paper).
 
-*  `cuda >= 10`  
-*  `gcc >= 9` 
-*  `SuiteParse` 
-* `Sophus 1.0.0 release` 
-* `Eigen >= 3.3.9` 
-* `TBB` 
-* `Boost >= 1.65` 
-* `pcl >= 1.9.1` 
-* `OpenCV >= 3` 
-* `Ceres` 
-* `Openmp` 
-* `yaml-cpp 0.7.0` 
+## Repository Layout
 
-Note: As specified in the above [Dockerfile](https://github.com/UMich-CURLY/docker_images/tree/master/cvo_gpu) , 'pcl-1.9.1' need to be changed and compiled to get it working with cuda. 
-* `pcl/io/boost.h`: add `#include <boost/numeric/conversion/cast.hpp>` at the end of the file before `#endif`
-* `pcl/point_cloud.h`: Some meet the error 
-```
-pcl/point_cloud.h:586100 error: template-id ‘getMapping’ used as a declarator
-friend boost::shared_ptr& detail::getMapping(pcl::PointCloud &p);
-```
-Please see [this doc](https://github.com/autowarefoundation/autoware/issues/2094) for reference
+Main solver code lives under [include/UnifiedCvo](include/UnifiedCvo):
 
-### Compile
-```
-export CC=gcc-9
-export CXX=g++-9
-mkdir build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${YOUR_INSTALL_DIR} 
-make -j4
-```
+- [include/UnifiedCvo/cvo/CvoGPU.hpp](include/UnifiedCvo/cvo/CvoGPU.hpp)
+- [include/UnifiedCvo/cvo/CvoGPU.cuh](include/UnifiedCvo/cvo/CvoGPU.cuh)
+- [include/UnifiedCvo/cvo/IRLS_State_GPU.cuh](include/UnifiedCvo/cvo/IRLS_State_GPU.cuh)
+- [include/UnifiedCvo/cvo/KernelWeight.hpp](include/UnifiedCvo/cvo/KernelWeight.hpp)
+- [include/UnifiedCvo/graph_optimizer/BAPipeline.hpp](include/UnifiedCvo/graph_optimizer/BAPipeline.hpp)
+- [include/UnifiedCvo/graph_optimizer/BAPipeline.tpp](include/UnifiedCvo/graph_optimizer/BAPipeline.tpp)
 
----
+Supporting utilities live under:
 
-### Demo
-#### Example of aligning two point clouds:
-###### Input Colored Point Clouds: 
+- [include/UnifiedCvo/utils](include/UnifiedCvo/utils)
+- [include/UnifiedCvo/dataset_handler](include/UnifiedCvo/dataset_handler)
 
-demo_data/source.pcd |  demo_data/target.pcd
---- | ---
-![](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/source.png "source.png")  | ![demo_data/target.pcd](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/target.png "target.png")
+Tests are under:
 
-###### Launch registration: 
-`./build/bin/cvo_align_gpu_two_color_pcd  demo_data/source.pcd  demo_data/target.pcd  cvo_params/cvo_outdoor_params.yaml `
+- [src/tests](src/tests)
 
-###### Results: Stacking two point clouds before and after alignment 
+Runners are under:
 
-Before registration (`before_align.pcd`) |  After registration (`after_align.pcd`) 
---- | ---
-![stacking source.pcd and target.pcd before registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/before_align.png "Stacked Point Cloud before registration")  | ![stacking source.pcd and target.pcd after registration](https://github.com/UMich-CURLY/unified_cvo/raw/multiframe/demo_data/after_align.png "Stacked Point Cloud before registration")
+- [src/experiments](src/experiments)
 
-#### Example of aligning four point clouds
+## Design
 
-`bash scripts/cvo_irls_tartan_demo.bash`
+### Header-heavy, template-first structure
 
-#### Frame-to-Frame Registration Demo on Kitti
-Make sure the folder of Kitti Stereo sequences contains the `cvo_calib.txt` and the parameter yaml file is specified. Now inside docker container:
-* Geometric Registration: `bash scripts/kitti_geometric_stereo.bash`
-* Color Registration:     `bash scripts/kitti_intensity_stereo.bash`
-* Semantic Registration:  `bash scripts/cvo_semantic_img_oct26_gpu0.bash`
+The library target layout is:
 
+- `cvo_header_only`
+  - interface target for the templated solver/utilities
+- `cvo_inst_3_19`
+  - explicit CUDA instantiation for `pcl::PointSemantic<3,19>`
+- `cvo_inst_1_19`
+  - explicit CUDA instantiation for `pcl::PointSemantic<1,19>`
+- `cvo_dataset_handlers`
+  - dataset IO and handler-backed runner support
 
----
+This means:
 
-### Installation 
-If you want to import this repo in your CMAKE project
-* Install this library: `make install`
-* In your own repository's `CMakeLists.txt`:
- ```
- find_package(UnifiedCvo REQUIRED ) 
- target_link_libraries(${YOUR_LIBRARY_NAME}                                                                                                                                                                              
- PUBLIC                                                                                                                                     ${YOUR_OTHER_LINKED_LIBRARIES}                                                                                             
- UnifiedCvo::cvo_utils
- UnifiedCvo::lie_group_utils
- UnifiedCvo::cvo_gpu_img
- UnifiedCvo::cvo_gpu_lidar
- UnifiedCvo::elas
- UnifiedCvo::tum
- UnifiedCvo::kitti
- ) 
- ```
+- most algorithm logic is in headers and `.cuh` files
+- users can reuse the templated interfaces directly
+- this repo still ships a small number of pre-instantiated libraries for the built-in demos and tests
 
----
+### Point types
 
-### Tutorial: How to use the library?
+The main point type family is based on [include/UnifiedCvo/utils/PointSemantic.hpp](include/UnifiedCvo/utils/PointSemantic.hpp).
 
-The function that aligns the two input point clouds are declared in `include/UnifiedCvo/cvo/CvoGPU.hpp`:
-```
-int align(/// inputs
-          source_pointcloud,
-          target_pointcloud,
-          init_pose_from_target_frame_to_source_frame,
-          /// outputs
-          result_pose_from_source_frame_to_target_frame,
-          result_data_correspondence,
-          total_running_time
-        )
-```
+It can store:
 
-#### Definitions of the point clouds
-We currently support two data structures to represent point clouds. The two data structures could support many types of information. Only information necessary to the user has to be assigned, while the remaining can be initialized as zero. 
+- `x, y, z`
+- `r, g, b`
+- `features[FEATURE_DIM]`
+- `label`
+- `label_distribution[NUM_CLASS]`
+- optional geometric type / normal / covariance data
 
-1. PCL format: defined in `include/UnifiedCvo/utils/PointSegmentedDistribution.hpp` 
-```
-  template <unsigned int FEATURE_DIM, unsigned int NUM_CLASS>  
-  PointSegmentedDistribution
-  {
-    PCL_ADD_POINT4D;                      /// x, y, z
-    PCL_ADD_RGB;                          /// r, g, b
-    float features[FEATURE_DIM];          /// features invariant to transformations, scaled between [0,1]. 
-                                          /// It can include rescaled colors, lidar intensities, 
-                                          /// image gradients, etc
-    int   label;                          /// its semantic label
-    float label_distribution[NUM_CLASS];  /// semantic distribution vector, whose sum is 1.0
-    float geometric_type[2];              /// (optional) edge: 0; surface: 1
-    float normal[3];                      /// (optional) normal vector at this point
-    float covariance[9];                  /// (optional) sample covariance at this point
-    float cov_eigenvalues[3];             /// (optional) eigenvalues of the covariance matrix
-  };
-```
-`FEATURE_DIM` and `NUM_CLASS` are template arguments and have to be determined at compile time in `CMakeLists.txt`. Values of each field can be assigned like a regular Point object in PCL library. If you don't use some fields, they can be assigned as zero.
+The generic point cloud wrapper is:
 
-2. Our customized point cloud data structure, `include/UnifiedCvo/utils/CvoPointCloud`. It wraps around the same pointwise information like 3D coordinates, invariant features, semantic distributions, etc. Moreover, it provides constructors from stereo images, RGB-D images, lidar point clouds, and PCL format point clouds.
+- [include/UnifiedCvo/utils/CvoPointCloud.hpp](include/UnifiedCvo/utils/CvoPointCloud.hpp)
 
-Examples:
-```
-/// Construct CvoPointCloud by inserting points 
-CvoPointCloud pc(FEATURE_DIMENSIONS, NUM_CLASSES);
-pc.reserve(num_points, FEATURE_DIMENSIONS, NUM_CLASSES);
-for (int i = 0; i < num_points; i++) {
-  /// xyz: the 3D coordinates of the points
-  /// feature: the invariant features, such as color, image gradients, etc. Its dimension is 
-  ///            FEATURE_DIMENSIONS. If you don't use it,
-  ///            they can be assigend as zero, i.e. Eigen::VectorXf::Zero(FEATURE_DIMENSION)
-  /// semantics: the semantic distribution vector, whose sum is 1. Its dimension is
-  ///            NUM_CLASSES. If you don't use it, they can be assigned as zero
-  /// geometric_type: A 2-dim vector, deciding whether the point is an edge or a surface. 
-  ///            They can be assigned as zero if you don't need this information
-  pc.add_point(i, xyz, feature, semantics, geometric_type);
-}
- 
+Point conversion is handled by:
+
+- [include/UnifiedCvo/utils/PointConverter.hpp](include/UnifiedCvo/utils/PointConverter.hpp)
+
+Current conversion rules include:
+
+- `PointXYZRGB -> PointSemantic`
+  - geometry, RGB, and normalized RGB copied into `features[0:3]`
+- `PointXYZI -> PointSemantic`
+  - geometry and intensity copied into `features[0]`
+- `PointSemantic -> PointSemantic`
+  - features and semantic distributions copied directly
+
+## Main Interfaces
+
+### `cvo::CvoGPU<PointT>`
+
+Declared in [include/UnifiedCvo/cvo/CvoGPU.hpp](include/UnifiedCvo/cvo/CvoGPU.hpp).
+
+Core public interface:
+
+```cpp
+template <typename PointT>
+class CvoGPU {
+public:
+  using PointCloud = CvoPointCloud<PointT>;
+
+  explicit CvoGPU(const CvoParams& params);
+
+  CvoResultInfo align(const PointCloud& source,
+                      const PointCloud& target,
+                      const Eigen::Matrix4f& T_init,
+                      bool return_association = false) const;
+
+  float function_angle(const PointCloud& source,
+                       const PointCloud& target,
+                       const Eigen::Matrix4f& T,
+                       float ell,
+                       bool approximate = true) const;
+
+  void compute_association(const PointCloud& source,
+                           const PointCloud& target,
+                           const Eigen::Matrix4f& T,
+                           float ell,
+                           Association& assoc) const;
+
+  int align_multiframe(std::vector<std::shared_ptr<CvoFrameGPU<PointT>>>& frames,
+                       const std::vector<std::shared_ptr<BinaryStateGPU<PointT>>>& edge_states,
+                       const std::vector<bool>& fixed_flags,
+                       double* registration_seconds = nullptr);
+
+  int align_multiframe(const std::vector<CvoPointCloud<PointT>>& clouds,
+                       const pgo::MapOfPoses& initial_poses,
+                       const pgo::VectorOfConstraints& constraints,
+                       pgo::MapOfPoses* optimized_poses = nullptr,
+                       double* registration_seconds = nullptr);
+};
 ```
 
+Important convention:
 
-```
-/// CvoPointCloud from pcl::PointXYZ, with only geometric information
-pcl::PointCloud<pcl::PointXYZ>::Ptr source_pcd(new pcl::PointCloud<pcl::PointXYZ>);
-pcl::io::loadPCDFile(source_file, *source_pcd);
-std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_pcd));
-```
+- pairwise alignment uses `T * p_target = p_source`
 
-```
-/// CvoPointCloud from pcl::PointXYZRGB, with both geometric and semantic information
-pcl::PointCloud<pcl::PointXYZRGB>::Ptr source_pcd(new pcl::PointCloud<pcl::PointXYZRGB>);
-pcl::io::loadPCDFile(source_file, *source_pcd);
-std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_pcd));
-```
+The current kernel weighting path multiplies:
 
-```
-/// CvoPointCloud from RGB-D camera with color information
-  cv::Mat source_rgb, source_dep;
-  tum.read_next_rgbd(source_rgb, source_dep);
-  std::vector<uint16_t> source_dep_data(source_dep.begin<uint16_t>(), source_dep.end<uint16_t>());
-  std::shared_ptr<cvo::ImageRGBD<uint16_t>> source_raw(new cvo::ImageRGBD(source_rgb, source_dep_data));
-  std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_raw,
-                                                                    calib
-                                                                    ));
-```
+- spatial/geometric kernel
+- feature kernel
+- semantic-distribution kernel
+- optional geometric-type compatibility
 
+for both pairwise `function_angle()` and multiframe sparse correlation filling.
 
-```
-/// CvoPointCloud from Stereo camera with color and semantic information
-  cv::Mat source_left, source_right;
-  std::vector<float> semantics_source;
-  kitti.read_next_stereo(source_left, source_right, NUM_SEMANTIC_CLASSES, semantics_source);
-  std::shared_ptr<cvo::ImageStereo> source_raw(new cvo::ImageStereo(source_left, source_right, NUM_CLASSES, semantics_source));
-  std::shared_ptr<cvo::CvoPointCloud> source(new cvo::CvoPointCloud(*source_raw, calib));
+### `cvo::BAPipeline<PointT>`
 
-```
+Declared in [include/UnifiedCvo/graph_optimizer/BAPipeline.hpp](include/UnifiedCvo/graph_optimizer/BAPipeline.hpp).
 
+Core public interface:
 
-#### Edit CMakeLists.txt to build the library
+```cpp
+struct BAPipelineOptions {
+  std::string dataset_type;
+  std::filesystem::path dataset_root;
+  std::string params_yaml;
+  std::filesystem::path graph_file;
+  std::filesystem::path output_prefix;
+  std::filesystem::path pose_file;
+  std::filesystem::path calibration_file;
+};
 
-Based on the dimension of intensity features and the semantic features, we will need to add compile definitions in `CMakeLists.txt`:
-```
-target_compile_definitions(cvo_gpu_img_lib PRIVATE -DNUM_CLASSES=${YOUR_FEATURE_DIMENSION} -DFEATURE_DIMENSIONS=${YOUR_SEMANTIC_VECTOR_DIMESNION}) 
-```
-For example, if you compile this library for a customized stereo point cloud with 5 dimension color channels `(r,g,b, gradient_x, gradient_y)` and 19 semantic classes (a distribution vector of dimension 19):
-
-```
-add_library(cvo_gpu_img_lib ${CVO_GPU_SOURCE})                                                               
-target_link_libraries(cvo_gpu_img_lib PRIVATE lie_group_utils cvo_utils_lib  )                               
-target_compile_definitions(cvo_gpu_img_lib PRIVATE -DNUM_CLASSES=19 -DFEATURE_DIMENSIONS=5)   # the dimension of the feature/semantics are declared here              
-set_target_properties(cvo_gpu_img_lib PROPERTIES                                                               
-POSITION_INDEPENDENT_CODE ON                                                                                 
-CUDA_SEPERABLE_COMPILATION ON                                                                                 
-COMPILE_OPTIONS "$<$<NOT:$<COMPILE_LANGUAGE:CUDA>>:-fPIC>") 
+template <typename PointT>
+class BAPipeline {
+public:
+  explicit BAPipeline(BAPipelineOptions options);
+  int run();
+  static BAGraphSpec read_graph_spec(const std::filesystem::path& path);
+};
 ```
 
-#### Examples on calling the functions:
-1. [Example code for aligning two geometric point clouds, without color/semantics](https://github.com/UMich-CURLY/unified_cvo/blob/multiframe/src/experiments/main_cvo_gpu_align_two_pcd.cpp)
+The current pipeline is intentionally thin. It handles:
+
+- graph loading
+- dataset handler creation
+- point cloud loading for selected frames
+- initial pose loading
+- simple constraint assembly
+- multiframe IRLS solve
+- export of trajectory and stacked point clouds
+
+## Parameters
+
+Parameters are defined in [include/UnifiedCvo/cvo/CvoParams.hpp](include/UnifiedCvo/cvo/CvoParams.hpp) and typically loaded with `read_CvoParams_yaml(...)`.
+
+### Pairwise kernel parameters
+
+- `ell_init`, `ell_min`, `ell_max`
+  - spatial kernel length-scale schedule
+- `sigma`
+  - spatial kernel signal scale
+- `sp_thres`
+  - sparse correlation cutoff
+- `c_ell`, `c_sigma`
+  - feature kernel length-scale and signal scale
+- `s_ell`, `s_sigma`
+  - semantic-distribution kernel length-scale and signal scale
+
+### Pairwise solver parameters
+
+- `MAX_ITER`
+  - maximum pairwise iterations
+- `eps`, `eps_2`
+  - stopping thresholds
+- `min_step`, `max_step`
+  - pairwise step-size bounds
+- `ell_decay_rate`, `ell_decay_start`
+  - pairwise `ell` schedule
+- `nearest_neighbors_max`
+  - sparse fill neighbor cap
+
+### Pairwise mode flags
+
+- `is_using_geometry`
+  - enable spatial/geometric kernel
+- `is_using_intensity`
+  - enable feature kernel over `features[]`
+- `is_using_semantics`
+  - enable semantic-distribution kernel over `label_distribution[]`
+- `is_using_geometric_type`
+  - multiply by geometric-type compatibility
+- `is_using_range_ell`
+  - enable range-adaptive spatial `ell`
+- `is_using_kdtree`
+  - enable CUDA kd-tree accelerated sparse search
+- `is_global_angle_registration`
+  - enable global rotation search when used by a caller
+
+### Multi-frame IRLS parameters
+
+- `multiframe_max_iters`
+  - global maximum IRLS iterations
+- `multiframe_ell_init`
+  - initial multiframe kernel length-scale
+- `multiframe_ell_min`
+  - minimum multiframe `ell`
+- `multiframe_ell_decay_rate`
+  - decay ratio once the current `ell` level converges
+- `multiframe_iterations_per_ell`
+  - inner iteration budget at each `ell`
+- `multiframe_num_neighbors`
+  - sparse neighbors per edge
+- `multiframe_min_nonzeros`
+  - minimum sparse support required before solve
+- `multiframe_sparse_fill_backend`
+  - sparse fill backend
+  - `0 = cpu_mutual`
+  - `1 = gpu_mutual_knn`
+
+### Logging/debug parameters
+
+- `multiframe_enable_iteration_log`
+  - write per-iteration objective CSV
+- `multiframe_iteration_log_path`
+  - path for objective trace CSV
+- `multiframe_enable_pose_log`
+  - write per-iteration pose CSV
+- `multiframe_pose_log_path`
+  - path for pose trace CSV
+
+## Build
+
+```bash
+cmake -S . -B build
+cmake --build build -j1
 ```
-add_executable(cvo_align_gpu_two_pcd ${PROJECT_SOURCE_DIR}/src/experiments/main_cvo_gpu_align_two_pcd.cpp)
-target_include_directories(cvo_align_gpu_two_pcd PUBLIC
-        "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"                
-        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
-      target_link_libraries(cvo_align_gpu_two_pcd cvo_gpu_img_lib cvo_gpu_img_lib cvo_utils_lib boost_filesystem boost_system pcl_io pcl_common)
 
+For repeated local work, this repo has usually been built into `build.bunnytest`:
+
+```bash
+cmake -S . -B build.bunnytest
+cmake --build build.bunnytest -j1
 ```
 
-2. [Example code for aligning two color point clouds, without semantics](https://github.com/UMich-CURLY/unified_cvo/blob/multiframe/src/experiments/main_cvo_gpu_align_two_color_pcd.cpp)
-```
-add_executable(cvo_align_gpu_two_color_pcd ${PROJECT_SOURCE_DIR}/src/experiments/main_cvo_gpu_align_two_color_pcd.cpp)
-target_include_directories(cvo_align_gpu_two_color_pcd PUBLIC
-        "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"                
-        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
-target_link_libraries(cvo_align_gpu_two_color_pcd cvo_gpu_img_lib cvo_gpu_img_lib cvo_utils_lib boost_filesystem boost_system pcl_io pcl_common)
+Important targets:
 
-```
+- `cvo_test_3_19`
+- `multiframe_irls_test`
+- `multiframe_irls_angle_test`
+- `multiframe_irls_zero_motion_test`
+- `kernel_weighting_test`
+- `cukdtree_test`
+- `dataset_loader_test`
+- `ba_pipeline_test`
+- `main_multi_frame_irls_tartan`
+- `main_ba_pipeline_kitti_loop`
+- `main_ba_pipeline_tartan`
 
-3. [Example code for aligning KITTI stereo semantic point clouds](https://github.com/UMich-CURLY/unified_cvo/blob/release/src/experiments/https://github.com/UMich-CURLY/unified_cvo/blob/multiframe/src/experiments/main_cvo_gpu_align_semantic_image.cpp) 
+## Demos
 
-```
-add_executable(cvo_align_gpu_semantic_img ${PROJECT_SOURCE_DIR}/src/experiments/main_cvo_gpu_align_semantic_image.cpp)
-target_include_directories(cvo_align_gpu_semantic_img PUBLIC
-        "$<BUILD_INTERFACE:${CVO_INCLUDE_DIRS}>"                
-        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${PROJECT_NAME}-${${PROJECT_NAME}_VERSION}> )
-target_link_libraries(cvo_align_gpu_semantic_img cvo_gpu_img_lib cvo_utils_lib kitti  boost_filesystem boost_system)
+### Two-frame CVO Demo
 
-```
+The simplest built-in two-frame demo is:
 
-#### Example calibration file (cvo_calib.txt)     
-Calibration files are required for each data sequence. Note that for different sequences, the calibrations could be different. We assume the input images are already rectified. 
-
-* Stereo camera format: `fx fy cx cy  baseline  image_width image_height`. Then you `cvo_calib.txt` file in the sequence's folder should contain  `707.0912 707.0912 601.8873 183.1104 0.54 1226 370`
-  
-* RGB-D camera format:  `fx fy cx cy  depthscale image_width image_height`. Then you `cvo_calib.txt` file in the sequence's folder should contain `517.3 516.5 318.6 255.3 5000.0 640 480`
-
-
-
-#### Example [parameter file for geometry registration](https://github.com/UMich-CURLY/unified_cvo/blob/release/cvo_params/cvo_geometric_params_img_gpu0.yaml): 
-
-```%YAML:1.0                                                                                                                                
----                                                                                                                                   
-ell_init_first_frame: 0.95   # The lengthscale for the first frame if initialization is unknow                                                                                                                     
-ell_init: 0.25               # Initial Lengthscale                                                                                                                        
-ell_min: 0.05                # Minimum Lengthscale                                                                                                                            
-ell_max: 0.9                                                                                                                              
-dl: 0.0                                                                                                                                 
-dl_step: 0.3                                                                                                                              
-sigma: 0.1                                                                                                                               
-sp_thres: 0.007                                                                                                                             
-c: 7.0                                                                                                                                 
-d: 7.0                                                                                                                                 
-c_ell: 0.05                    # lengthscale for color/intensity if used                                                                                                                          
-c_sigma: 1.0                                                                                                                                
-s_ell: 0.1                     # lengthscale for semantics if used                                                                                                                            
-s_sigma: 1.0                                                                                                                            
-MAX_ITER: 10000                # max number of iterations to run in the optimization                                                                                                                          
-min_step: 0.000001             # minimum step size                                                                                                                         
-max_step: 0.01                 # maximum step size                                                                                                                            
-eps: 0.00005                                                                                                                              
-eps_2: 0.000012                                                                                                                             
-ell_decay_rate: 0.98 #0.98                                                                                                                       
-ell_decay_rate_first_frame: 0.99                                                                                                                    
-ell_decay_start: 60                                                                                                                           
-ell_decay_start_first_frame: 600  #2000                                                                                                                 
-indicator_window_size: 50                                                                                                                        
-indicator_stable_threshold: 0.001 #0.002                                                                                                                
-is_ell_adaptive: 0                                                                                                                           
-is_dense_kernel: 0                                                                                                                           
-is_full_ip_matrix: 0                                                                                                                          
-is_using_geometry: 1            # if geoemtric kernel is computed k(x,z)                                                                                                                       
-is_using_intensity: 0           # if color kernel is computed <l_x, l_z>. Enable it if using color info                                                                                                              
-is_using_semantics: 0           # if semantic kernel is computed. Enable it if using semantics                                                                                                                        
-is_using_range_ell: 0
-is_using_kdtree: 0
-is_exporting_association: 0
-nearest_neighbors_max: 512
-multiframe_using_cpu: 0
-is_using_geometric_type: 0
-
+```bash
+./build.bunnytest/cvo_test_3_19
 ```
 
+That test:
 
-#### Headers 
+- creates two synthetic semantic point clouds
+- runs one pairwise CVO step
+- checks that the function angle improves
 
-Core Library: `include/unified_cvo/cvo/CvoGPU.hpp`. This header file is the main interfacing of using the library. The `align` functions perform the registration. The `function_angle` functions measure the overlap of the two point clouds. 
+If you want to call the library directly:
 
-Customized PCL PointCloud: `include/unified_cvo/utils/PointSegmentedDistribution.hpp`.  This customized point definition takes number of classes and number of intensity channels as template arguments. These two are specified as target compiler definitions in the `CMakeLists.txt`
+```cpp
+using PointT = pcl::PointSemantic<3, 19>;
+using Cloud = cvo::CvoPointCloud<PointT>;
 
-Point Selector and Cvo PointCloud constructor: `include/unified_cvo/utils/CvoPointCloud.hpp` . Ways of contructing it are available 
+cvo::CvoParams params;
+params.is_using_geometry = 1;
+params.is_using_intensity = 1;
+params.is_using_semantics = 1;
 
+cvo::CvoGPU<PointT> solver(params);
+Cloud source, target;
+Eigen::Matrix4f T_init = Eigen::Matrix4f::Identity();
 
----
- 
- ### Citations
- If you find this repository useful, please cite 
+cvo::CvoResultInfo result = solver.align(source, target, T_init, true);
 ```
-@article{zhang2024rkhs,
-  title={RKHS-BA: A Semantic Correspondence-Free Multi-View Registration Framework with Global Tracking},
-  author={Zhang, Ray and Song, Jingwei and Gao, Xiang and Wu, Junzhe and Liu, Tianyi and Zhang, Jinyuan and Eustice, Ryan and Ghaffari, Maani},
-  journal={arXiv preprint arXiv:2403.01254},
-  year={2024}
-}
+
+### Two-frame and Multi-frame Regression Demos
+
+The fastest built-in smoke tests are:
+
+```bash
+./build.bunnytest/multiframe_irls_zero_motion_test
+./build.bunnytest/multiframe_bunny_test 2
+./build.bunnytest/multiframe_bunny_test 4
 ```
+
+Useful variants of `multiframe_bunny_test`:
+
+```bash
+./build.bunnytest/multiframe_bunny_test \
+  <num_frames> \
+  <sparse_fill_backend:0=cpu,1=gpu> \
+  <linear_backend:0=cpu_dense,1=gpu_dense,2=cpu_sparse,3=gpu_sparse> \
+  <objective_backend:0=cpu,1=gpu> \
+  <enable_line_search:0/1> \
+  [release_binary_state_gpu_each_iter:0/1] \
+  [stream_frame_clouds_gpu:0/1]
+```
+
+Example:
+
+```bash
+./build.bunnytest/multiframe_bunny_test 2 1 3 0 1 1 1
+```
+
+This runs:
+
+- 2-frame bunny registration
+- GPU mutual-kNN sparse fill
+- GPU sparse linear backend
+- CPU objective evaluation
+- line search enabled
+- early binary-state GPU release enabled
+- streamed frame-cloud GPU residency enabled
+
+Outputs are written in the repo root:
+
+- `multiframe_bunny_init_stack_<N>.ply`
+- `multiframe_bunny_final_stack_<N>.ply`
+- `multiframe_bunny_trace_<N>.csv`
+- `multiframe_bunny_pose_trace_<N>.csv`
+
+### Generic Multi-frame Runner
+
+### Generic multiframe runner
+
+The generic runner is:
+
+- [src/experiments/main_multi_frame_irls_tartan.cpp](src/experiments/main_multi_frame_irls_tartan.cpp)
+
+Usage:
+
+```bash
+./build.bunnytest/main_multi_frame_irls_tartan \
+  <dataset_type:{pcd|kitti_lidar|tartan_rgbd}> \
+  <dataset_root> \
+  <params_yaml> \
+  <graph_file> \
+  <output_prefix> \
+  [pose_file] [calibration_file]
+```
+
+Outputs:
+
+- `<output_prefix>_trajectory.txt`
+- `<output_prefix>_stacked_init.ply`
+- `<output_prefix>_stacked_final.ply`
+
+This runner is useful for:
+
+- direct multiframe IRLS on a selected graph
+- dataset-backed small tests
+- debugging without the extra BA pipeline layer
+
+### Dedicated BA Pipeline Runners
+
+KITTI loop-style runner:
+
+```bash
+./build.bunnytest/main_ba_pipeline_kitti_loop \
+  <kitti_sequence_root> \
+  <params_yaml> \
+  <graph_file> \
+  <output_prefix> \
+  <tracking_pose_file> \
+  [calibration_file]
+```
+
+Tartan runner:
+
+```bash
+./build.bunnytest/main_ba_pipeline_tartan \
+  <tartan_traj_root> \
+  <params_yaml> \
+  <graph_file> \
+  <output_prefix> \
+  [pose_file] [calibration_file]
+```
+
+### Recommended Shell Scripts
+
+Current helper scripts:
+
+- [scripts/ba_pipeline_kitti_loop.bash](scripts/ba_pipeline_kitti_loop.bash)
+- [scripts/ba_pipeline_tartan.bash](scripts/ba_pipeline_tartan.bash)
+- [scripts/run_kitti_gpu_sparse_ba_eval.bash](scripts/run_kitti_gpu_sparse_ba_eval.bash)
+
+Example KITTI run:
+
+```bash
+bash scripts/ba_pipeline_kitti_loop.bash \
+  /run/media/rayzhang/Samsung_T5/kitti_lidar/dataset/sequences \
+  ../RKHS_BA/cvo_params/cvo_irls_kitti_ba_params.yaml \
+  /tmp/cvo_runner_tests \
+  ../RKHS_BA/results/mulls_with_loop \
+  /tmp/cvo_runner_outputs \
+  07
+```
+
+Example Tartan run:
+
+```bash
+bash scripts/ba_pipeline_tartan.bash \
+  /run/media/rayzhang/Samsung_T5/tartanair \
+  ../RKHS_BA/cvo_params/cvo_tartan_demo_params.yaml \
+  /tmp/cvo_runner_tests \
+  small \
+  /tmp/cvo_runner_outputs \
+  abandonedfactory
+```
+
+### KITTI BA + Evaluation Demo
+
+The current end-to-end KITTI launcher is:
+
+- [scripts/run_kitti_gpu_sparse_ba_eval.bash](scripts/run_kitti_gpu_sparse_ba_eval.bash)
+
+It does all of the following:
+
+- builds `main_ba_pipeline_kitti_loop`
+- builds the KITTI odometry devkit evaluator from `../RKHS_BA/devkit/cpp/evaluate_odometry.cpp`
+- builds a radius graph from the input tracking trajectory
+- writes a temporary IRLS YAML
+- runs BA
+- evaluates both init and BA trajectories against KITTI `poses.txt`
+
+Usage:
+
+```bash
+./scripts/run_kitti_gpu_sparse_ba_eval.bash \
+  <seq> \
+  [dataset_base] \
+  [tracking_root] \
+  [output_root] \
+  [linear_backend] \
+  [release_binary_state_each_iter] \
+  [stream_frame_clouds_gpu]
+```
+
+Important arguments:
+
+- `linear_backend`
+  - `2 = cpu_sparse_block`
+  - `3 = gpu_sparse_block`
+- `release_binary_state_each_iter`
+  - `1` frees per-edge GPU buffers during sparse streamed assembly
+- `stream_frame_clouds_gpu`
+  - `1` uploads/frees frame clouds on demand instead of keeping all frames resident on GPU
+
+Recommended large-KITTI memory-saving launch:
+
+```bash
+./scripts/run_kitti_gpu_sparse_ba_eval.bash \
+  05 \
+  /run/media/rayzhang/Samsung_T5/kitti_lidar/dataset/sequences \
+  ../RKHS_BA/results/mulls_with_loop \
+  /tmp/cvo_runner_tests \
+  2 \
+  1 \
+  1
+```
+
+Outputs are written under:
+
+- `/tmp/cvo_runner_tests/kitti_<seq>_<backend_tag>/`
+
+including:
+
+- `<seq>_<backend_tag>_irls.yaml`
+- `<seq>_radius2m_graph.txt`
+- `kitti_<seq>_<backend_tag>_trajectory.txt`
+- `kitti_<seq>_<backend_tag>_stacked_init.ply`
+- `kitti_<seq>_<backend_tag>_stacked_final.ply`
+- `init_eval.txt`
+- `ba_eval.txt`
+
+## Testing
+
+Useful solver regression tests:
+
+```bash
+./build.bunnytest/kernel_weighting_test
+./build.bunnytest/multiframe_irls_angle_test
+./build.bunnytest/multiframe_irls_zero_motion_test
+./build.bunnytest/multiframe_bunny_test 2
+./build.bunnytest/multiframe_bunny_test 4
+./build.bunnytest/cukdtree_test
+```
+
+For multiframe trend traces:
+
+```bash
+python3 scripts/check_multiframe_trace.py <trace.csv>
+python3 scripts/check_bunny_pose_trace.py <pose_trace.csv>
+python3 scripts/check_bunny_multistep_trace.py <trace.csv> <pose_trace.csv>
+```
+
+## Current Limitations
+
+- `BAPipeline` is still a thin orchestration layer, not yet a full feature-parity port of the old monolithic `RKHS_BA` runners
+- current `BAPipeline` constraints are still mainly used as an edge list for multiframe IRLS; it is not yet a full odometry/loop-closure weighted pose-graph BA formulation
+- the repo is header-heavy, but not purely header-only because the shipped CUDA instantiation libraries remain necessary for the built-in point types
+- many older experiments and utilities from `RKHS_BA` have not yet been ported here
+
+## Relevant Files
+
+- solver core:
+  - [include/UnifiedCvo/cvo/CvoGPU.cuh](include/UnifiedCvo/cvo/CvoGPU.cuh)
+- sparse multiframe edge state:
+  - [include/UnifiedCvo/cvo/IRLS_State_GPU.cuh](include/UnifiedCvo/cvo/IRLS_State_GPU.cuh)
+- kernel weighting:
+  - [include/UnifiedCvo/cvo/KernelWeight.hpp](include/UnifiedCvo/cvo/KernelWeight.hpp)
+- BA pipeline:
+  - [include/UnifiedCvo/graph_optimizer/BAPipeline.hpp](include/UnifiedCvo/graph_optimizer/BAPipeline.hpp)
+- dataset-handler glue:
+  - [include/UnifiedCvo/utils/DatasetHandlerUtils.hpp](include/UnifiedCvo/utils/DatasetHandlerUtils.hpp)
+- tests:
+  - [src/tests](src/tests)
